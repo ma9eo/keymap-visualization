@@ -1,0 +1,40 @@
+{
+  "name": "clay",
+  "title": "クレイ",
+  "description": "厚みのある縁、左上からの光、柔らかい二重の影、丸みのある極太の書体",
+  "ground": { "type": "linear", "from": "#f3ece3", "to": "#ebe2d7" },
+  "key": {
+    "style": "clay",
+    "surface": "#f8f2ea",
+    "body": ["#f6efe6", "#e2d5c6"],
+    "face": ["#fdf9f4", "#f8f2ea", "#f0e7dc"],
+    "rimLight": "#ffffff",
+    "rimShade": "#b9a48d",
+    "radius": 0.15
+  },
+  "shadow": {
+    "color": "#6e5640",
+    "layers": [
+      { "dy": 1.6, "blur": 1.3, "opacity": 0.22 },
+      { "dy": 5, "blur": 5, "opacity": 0.16 }
+    ]
+  },
+  "font": {
+    "family": "'M PLUS Rounded 1c', 'Zen Maru Gothic', 'Noto Sans CJK JP', sans-serif",
+    "href": "https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap"
+  },
+  "text": { "base": "#33291f", "sub": "#85786a" },
+  "layers": ["#1f6fd9", "#127a55", "#7b3fc4", "#c4621f", "#b8336a", "#4b5bbf"],
+  "tintRatio": 0.42,
+  "neutral": "#45403a",
+  "dims": {
+    "cellHeight": 0.18,
+    "cellText": 0.13,
+    "baseText": 0.23,
+    "baseTextLong": 0.71,
+    "opText": 0.125,
+    "barHeight": 0.16,
+    "labelText": 0.12,
+    "weights": { "base": 800, "cell": 800, "op": 700, "label": 800, "sub": 500 }
+  }
+}

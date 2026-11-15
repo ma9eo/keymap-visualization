@@ -1,0 +1,463 @@
+{
+  "$schema": "../schema.json",
+  "meta": {
+    "keyboard": "torabo-tsuki LP（XS）",
+    "os": "Windows",
+    "language": "ja",
+    "hostLayout": "US",
+    "source": {
+      "repo": "github.com/ma9eo/zmk-keyboard-torabo-tsuki-lp",
+      "commit": "fab5a49",
+      "path": "config/keymap.keymap"
+    },
+    "spec": "キーマップ可視化 デザインルール v0.2 Draft"
+  },
+  "layers": [
+    {
+      "id": "num",
+      "name": "数字記号"
+    },
+    {
+      "id": "fn",
+      "name": "ファンクション"
+    },
+    {
+      "id": "ges",
+      "name": "ジェスチャ"
+    }
+  ],
+  "keys": [
+    {
+      "id": "Q",
+      "x": 0,
+      "y": 60,
+      "base": "Q",
+      "cells": {
+        "num": "!",
+        "fn": "F1"
+      },
+      "switch": {
+        "layer": "ges",
+        "via": "hold"
+      }
+    },
+    {
+      "id": "W",
+      "x": 100,
+      "y": 25,
+      "base": "W",
+      "cells": {
+        "num": "@",
+        "fn": "F2"
+      }
+    },
+    {
+      "id": "E",
+      "x": 200,
+      "y": 0,
+      "base": "E",
+      "cells": {
+        "num": "#",
+        "fn": "F3"
+      }
+    },
+    {
+      "id": "R",
+      "x": 300,
+      "y": 13,
+      "base": "R",
+      "cells": {
+        "num": "$",
+        "fn": "F4"
+      }
+    },
+    {
+      "id": "T",
+      "x": 400,
+      "y": 25,
+      "base": "T",
+      "cells": {
+        "num": "%",
+        "fn": "F5"
+      }
+    },
+    {
+      "id": "A",
+      "x": 0,
+      "y": 160,
+      "base": "A",
+      "cells": {
+        "num": "1",
+        "fn": "F6"
+      }
+    },
+    {
+      "id": "S",
+      "x": 100,
+      "y": 125,
+      "base": "S",
+      "cells": {
+        "num": "2",
+        "fn": "F7"
+      }
+    },
+    {
+      "id": "D",
+      "x": 200,
+      "y": 100,
+      "base": "D",
+      "cells": {
+        "num": "3",
+        "fn": "F8"
+      }
+    },
+    {
+      "id": "F",
+      "x": 300,
+      "y": 113,
+      "base": "F",
+      "cells": {
+        "num": "4",
+        "fn": "F9"
+      },
+      "taps": [
+        {
+          "icon": "tap-2",
+          "text": "英数"
+        }
+      ]
+    },
+    {
+      "id": "G",
+      "x": 400,
+      "y": 125,
+      "base": "G",
+      "cells": {
+        "num": "5",
+        "fn": "F10"
+      }
+    },
+    {
+      "id": "Z",
+      "x": 0,
+      "y": 260,
+      "base": "Z",
+      "cells": {
+        "num": "6",
+        "fn": "F11"
+      },
+      "hold": "Shift"
+    },
+    {
+      "id": "X",
+      "x": 100,
+      "y": 225,
+      "base": "X",
+      "cells": {
+        "num": "7",
+        "fn": "F12"
+      },
+      "hold": "Alt"
+    },
+    {
+      "id": "C",
+      "x": 200,
+      "y": 200,
+      "base": "C",
+      "cells": {
+        "num": "8",
+        "fn": "BT0"
+      }
+    },
+    {
+      "id": "V",
+      "x": 300,
+      "y": 213,
+      "base": "V",
+      "cells": {
+        "num": "9",
+        "fn": "BT1"
+      }
+    },
+    {
+      "id": "B",
+      "x": 400,
+      "y": 225,
+      "base": "B",
+      "cells": {
+        "num": "0",
+        "fn": "BT2"
+      },
+      "note": 1
+    },
+    {
+      "id": "BSPC",
+      "x": 315,
+      "y": 350,
+      "base": "Bksp",
+      "cells": {
+        "fn": "Del"
+      },
+      "hold": "Ctrl"
+    },
+    {
+      "id": "SPC",
+      "x": 420,
+      "y": 350,
+      "rot": 10,
+      "rx": 420,
+      "ry": 450,
+      "base": "Space",
+      "cells": {
+        "fn": "Esc"
+      },
+      "switch": {
+        "layer": "num",
+        "via": "hold"
+      }
+    },
+    {
+      "id": "Y",
+      "x": 950,
+      "y": 25,
+      "base": "Y",
+      "cells": {
+        "num": "^",
+        "fn": "音量+"
+      }
+    },
+    {
+      "id": "U",
+      "x": 1050,
+      "y": 13,
+      "base": "U",
+      "cells": {
+        "num": "&",
+        "fn": "前のタブ"
+      }
+    },
+    {
+      "id": "I",
+      "x": 1150,
+      "y": 0,
+      "base": "I",
+      "cells": {
+        "num": "*",
+        "fn": "↑",
+        "ges": "タスクビュー"
+      }
+    },
+    {
+      "id": "O",
+      "x": 1250,
+      "y": 25,
+      "base": "O",
+      "cells": {
+        "num": "(",
+        "fn": "次のタブ"
+      }
+    },
+    {
+      "id": "P",
+      "x": 1350,
+      "y": 60,
+      "base": "P",
+      "cells": {
+        "num": ")",
+        "fn": "タスクビュー"
+      }
+    },
+    {
+      "id": "H",
+      "x": 950,
+      "y": 125,
+      "base": "H",
+      "cells": {
+        "num": "{",
+        "fn": "音量−"
+      }
+    },
+    {
+      "id": "J",
+      "x": 1050,
+      "y": 113,
+      "base": "J",
+      "cells": {
+        "num": "-",
+        "fn": "←",
+        "ges": "仮想デスクトップ左"
+      },
+      "taps": [
+        {
+          "icon": "tap-2",
+          "text": "かな"
+        }
+      ]
+    },
+    {
+      "id": "K",
+      "x": 1150,
+      "y": 100,
+      "base": "K",
+      "cells": {
+        "num": "=",
+        "fn": "↓",
+        "ges": "デスクトップ表示"
+      }
+    },
+    {
+      "id": "L",
+      "x": 1250,
+      "y": 125,
+      "base": "L",
+      "cells": {
+        "num": "}",
+        "fn": "→",
+        "ges": "仮想デスクトップ右"
+      }
+    },
+    {
+      "id": "SCLN",
+      "x": 1350,
+      "y": 160,
+      "base": ";",
+      "cells": {
+        "num": ":",
+        "fn": "PrtSc"
+      },
+      "hold": "Win"
+    },
+    {
+      "id": "N",
+      "x": 950,
+      "y": 225,
+      "base": "N",
+      "cells": {
+        "num": "_",
+        "fn": "'"
+      }
+    },
+    {
+      "id": "M",
+      "x": 1050,
+      "y": 213,
+      "base": "M",
+      "cells": {
+        "num": "+",
+        "fn": "\""
+      }
+    },
+    {
+      "id": "COMMA",
+      "x": 1150,
+      "y": 200,
+      "base": ",",
+      "cells": {
+        "num": "[",
+        "fn": "`"
+      }
+    },
+    {
+      "id": "DOT",
+      "x": 1250,
+      "y": 225,
+      "base": ".",
+      "cells": {
+        "num": "]",
+        "fn": "~"
+      }
+    },
+    {
+      "id": "FSLH",
+      "x": 1350,
+      "y": 260,
+      "base": "/",
+      "cells": {
+        "num": "\\",
+        "fn": "|"
+      },
+      "hold": "Shift"
+    },
+    {
+      "id": "ENT",
+      "x": 930,
+      "y": 350,
+      "rot": -10,
+      "rx": 1030,
+      "ry": 450,
+      "base": "Enter",
+      "cells": {
+        "num": "Tab"
+      },
+      "switch": {
+        "layer": "fn",
+        "via": "hold"
+      }
+    }
+  ],
+  "combos": [
+    {
+      "keys": [
+        "Z",
+        "X"
+      ],
+      "text": "コピー履歴",
+      "kind": "base"
+    },
+    {
+      "keys": [
+        "V",
+        "B"
+      ],
+      "text": "BTペア解除",
+      "kind": "layer",
+      "layer": "fn"
+    },
+    {
+      "keys": [
+        "H",
+        "J"
+      ],
+      "text": "中クリック",
+      "kind": "base"
+    },
+    {
+      "keys": [
+        "J",
+        "K"
+      ],
+      "text": "左クリック",
+      "kind": "base"
+    },
+    {
+      "keys": [
+        "K",
+        "L"
+      ],
+      "text": "右クリック",
+      "kind": "base"
+    },
+    {
+      "keys": [
+        "M",
+        "COMMA"
+      ],
+      "text": "数字記号",
+      "kind": "go",
+      "layer": "num"
+    }
+  ],
+  "notes": [
+    {
+      "n": 1,
+      "key": "B",
+      "text": "BT2 を選ぶと Mac 用の割り当てに切り替わる。この図は BT0・BT1 を選んでいるときの状態。"
+    }
+  ],
+  "aux": [
+    {
+      "title": "トラックボール",
+      "text": "数字記号レイヤー中はスクロールとして動作する。"
+    }
+  ]
+}

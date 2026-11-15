@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/ma9eo/keymap-visualization/renderer/schema.json",
+  "title": "キーマップ可視化 中間データ",
+  "description": "キーマップ可視化 デザインルール v0.2 の中間データ。キーマップを解析し、入力項目を確定させた結果を表す。座標は 1u = 100 の単位で表す。",
+  "type": "object",
+  "required": ["meta", "layers", "keys"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "meta": {
+      "type": "object",
+      "description": "ヘッダ・メタ情報と、描画に使う入力項目（第10.0節・第10.7節）",
+      "required": ["keyboard", "os", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "keyboard": { "type": "string", "description": "キーボード名（実機のサイズを含む）" },
+        "os": { "type": "string", "description": "対象OS" },
+        "language": { "type": "string", "enum": ["ja", "en"], "default": "ja", "description": "表示言語" },
+        "hostLayout": { "type": "string", "description": "ホストのキーボード配列（US・JISなど）。記号の解釈に使った値を記録する。図には表示しない" },
+        "source": {
+          "type": "object",
+          "required": ["repo", "commit"],
+          "additionalProperties": false,
+          "properties": {
+            "repo": { "type": "string", "description": "リポジトリ" },
+            "commit": { "type": "string", "pattern": "^[0-9a-f]{7,40}$", "description": "コミットハッシュ（ファイルの blob ハッシュではない）" },
+            "path": { "type": "string", "description": "キーマップのファイルパス" }
+          }
+        },
+        "spec": { "type": "string", "description": "本仕様のバージョン" },
+        "title": { "type": "string", "description": "見出し。省略時は「キーボード名 キーマップ — OS」" }
+      }
+    },
+    "layers": {
+      "type": "array",
+      "description": "追加レイヤー。並び順が表示スロットの順（第3.2節）",
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "required": ["id", "name"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "description": "データ内で参照するための識別子" },
+          "name": { "type": "string", "description": "表示名（第3.1節）" },
+          "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$", "description": "レイヤー色。省略時はテーマのレイヤー色を順に使う" }
+        }
+      }
+    },
+    "keys": {
+      "type": "array",
+      "description": "描画するキー。割り当てのないキーと表示しないキーは含めない（第9.0.1節）",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "x", "y"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "x": { "type": "number", "description": "キーの左上の横位置（1u = 100）" },
+          "y": { "type": "number", "description": "キーの左上の縦位置（1u = 100）" },
+          "rot": { "type": "number", "description": "回転角（度、時計回り）" },
+          "rx": { "type": "number", "description": "回転の中心の横位置（省略時はキーの中心）" },
+          "ry": { "type": "number", "description": "回転の中心の縦位置（省略時はキーの中心）" },
+          "base": { "type": "string", "description": "基本入力" },
+          "cells": {
+            "type": "object",
+            "description": "追加レイヤーの出力。キーはレイヤーの id",
+            "additionalProperties": { "type": "string" }
+          },
+          "hold": { "type": "string", "description": "Hold の機能名（レイヤー切り替え以外）" },
+          "taps": {
+            "type": "array",
+            "description": "Tap Dance（レイヤー切り替え以外）",
+            "items": {
+              "type": "object",
+              "required": ["icon", "text"],
+              "additionalProperties": false,
+              "properties": {
+                "icon": { "type": "string", "enum": ["tap-2", "tap-3"] },
+                "text": { "type": "string" }
+              }
+            }
+          },
+          "switch": {
+            "type": "object",
+            "description": "レイヤー切り替え（第4.3節）",
+            "required": ["layer", "via"],
+            "additionalProperties": false,
+            "properties": {
+              "layer": { "type": "string", "description": "切り替え先レイヤーの id" },
+              "via": { "type": "string", "enum": ["hold", "tap-2", "tap-3", "toggle", "to", "one-shot"], "description": "切り替える操作" }
+            }
+          },
+          "note": { "type": "integer", "minimum": 1, "description": "注釈番号（第8.2節）" }
+        }
+      }
+    },
+    "combos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["keys", "text", "kind"],
+        "additionalProperties": false,
+        "properties": {
+          "keys": { "type": "array", "minItems": 2, "items": { "type": "string" }, "description": "構成キーの id" },
+          "text": { "type": "string", "description": "機能名" },
+          "short": { "type": "string", "description": "短縮表記。ラベルが収まらないときに描画プログラムが使い、正式名を補助一覧に載せる（第6.1節・第10.4節）" },
+          "kind": {
+            "type": "string",
+            "enum": ["base", "layer", "go"],
+            "description": "base：レイヤーに関係なく有効／layer：そのレイヤーにいる間だけ有効／go：そのレイヤーへ行く（第3.1節）"
+          },
+          "layer": { "type": "string", "description": "kind が layer・go のときのレイヤーの id" }
+        },
+        "allOf": [
+          { "if": { "properties": { "kind": { "enum": ["layer", "go"] } } }, "then": { "required": ["layer"] } }
+        ]
+      }
+    },
+    "notes": {
+      "type": "array",
+      "description": "注釈領域の本文（第8.3節）",
+      "items": {
+        "type": "object",
+        "required": ["n", "text"],
+        "additionalProperties": false,
+        "properties": {
+          "n": { "type": "integer", "minimum": 1 },
+          "key": { "type": "string", "description": "対象キーの id" },
+          "text": { "type": "string" }
+        }
+      }
+    },
+    "aux": {
+      "type": "array",
+      "description": "補助一覧（第10.7節）。識別子方式のComboの対応表は描画プログラムが自動で加える",
+      "items": {
+        "type": "object",
+        "required": ["title"],
+        "additionalProperties": false,
+        "properties": {
+          "title": { "type": "string" },
+          "text": { "type": "string" },
+          "lines": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}
