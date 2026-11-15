@@ -21,6 +21,7 @@ const PAD = 6; // キー内側の余白
 const COL_GAP = 3; // セル同士の間隔
 const ENLARGE = [1, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3]; // 第10.4節の1：キー拡大の段階（最大1.3倍）
 const SHRINK = [0.95, 0.9, 0.85, 0.8]; // 第10.4節の3：文字縮小の段階（読める範囲として80%まで）
+const SPLIT_GAP = 100; // 第10.1節：分割型の左右の間隔（1u）
 const ICON_FILES = { 'tap-2': 'tap-2.svg', 'tap-3': 'tap-3.svg', toggle: 'toggle.svg', to: 'to.svg', 'one-shot': 'one-shot.svg' };
 const WORDS = {
   ja: { keymap: 'キーマップ', source: '出典', spec: '仕様', notes: '注釈', aux: '補助一覧', combo: 'Combo', short: 'Comboの短縮表記' },
@@ -297,6 +298,25 @@ function splitX(keys) {
   return best.gap > PITCH * 2 ? best.at : Infinity;
 }
 
+// 分割型は、左右の間隔を実際の距離ではなく SPLIT_GAP に詰める（第10.1節）。左右それぞれの中の配置は変えない
+function keyCorners(k) {
+  const [x0, y0] = keyBox(k), pts = [[x0, y0], [x0 + KS, y0], [x0, y0 + KS], [x0 + KS, y0 + KS]];
+  if (!k.rot) return pts;
+  const cx = k.rx ?? k.x + PITCH / 2, cy = k.ry ?? k.y + PITCH / 2, a = (k.rot * Math.PI) / 180;
+  return pts.map(([x, y]) => [cx + (x - cx) * Math.cos(a) - (y - cy) * Math.sin(a), cy + (x - cx) * Math.sin(a) + (y - cy) * Math.cos(a)]);
+}
+function compressSplit(data) {
+  const split = splitX(data.keys);
+  if (split === Infinity) return data;
+  const right = (k) => k.x + KS / 2 >= split;
+  const leftEdge = Math.max(...data.keys.filter((k) => !right(k)).flatMap((k) => keyCorners(k).map((p) => p[0])));
+  const rightEdge = Math.min(...data.keys.filter(right).flatMap((k) => keyCorners(k).map((p) => p[0])));
+  const dx = rightEdge - leftEdge - (SPLIT_GAP - (PITCH - KS));
+  if (dx <= 0) return data;
+  const keys = data.keys.map((k) => (right(k) ? { ...k, x: k.x - dx, ...(k.rx !== undefined ? { rx: k.rx - dx } : {}) } : k));
+  return { ...data, keys };
+}
+
 // ---------------------------------------------------------------- 描画
 function render(data, theme, icons) {
   const P = palette(theme, data);
@@ -445,5 +465,5 @@ if (args.help || !args.data) {
 }
 const data = loadJSON(args.data, '中間データ');
 validate(data);
-const svg = render(data, loadTheme(args.theme), loadIcons());
+const svg = render(compressSplit(data), loadTheme(args.theme), loadIcons());
 if (args.out) fs.writeFileSync(args.out, svg); else process.stdout.write(svg);
