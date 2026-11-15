@@ -117,7 +117,7 @@
         "additionalProperties": false,
         "properties": {
           "keys": { "type": "array", "minItems": 2, "items": { "type": "string" }, "description": "構成キーの id" },
-          "text": { "type": "string", "description": "機能名" },
+          "text": { "type": "string", "description": "機能名。レイヤー切り替え（go）では切り替え先レイヤーの名前か、切り替える目的" },
           "short": { "type": "string", "description": "短縮表記。ラベルが収まらないときに描画プログラムが使い、正式名をCombo欄に載せる（第6.1節・第10.4節）。記号1文字だけにはしない" },
           "note": { "type": "string", "description": "Comboの補足（有効条件など）。Combo欄に載せる（第6章）" },
           "kind": {

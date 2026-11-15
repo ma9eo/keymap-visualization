@@ -24,8 +24,8 @@ const SHRINK = [0.95, 0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.6, 0.55, 0.5]; // 第10
 const SPLIT_GAP = 100; // 第10.1節：分割型の左右の間隔（1u）
 const ICON_FILES = { 'tap-2': 'tap-2.svg', 'tap-3': 'tap-3.svg', toggle: 'toggle.svg', to: 'to.svg', 'one-shot': 'one-shot.svg' };
 const WORDS = {
-  ja: { keymap: 'キーマップ', source: '出典', spec: '仕様', notes: '注釈', combo: 'Combo', and: '＋', dash: ' — ', colon: '：', stop: '。' },
-  en: { keymap: 'Keymap', source: 'Source', spec: 'Spec', notes: 'Notes', combo: 'Combos', and: '+', dash: ' — ', colon: ': ', stop: '. ' },
+  ja: { keymap: 'キーマップ', source: '出典', spec: '仕様', notes: '注釈', combo: 'Combo', and: '＋', dash: ' — ', colon: '：', stop: '。', goTo: (n) => `${n}レイヤーへ切り替える` },
+  en: { keymap: 'Keymap', source: 'Source', spec: 'Spec', notes: 'Notes', combo: 'Combos', and: '+', dash: ' — ', colon: ': ', stop: '. ', goTo: (n) => `Switches to the ${n} layer` },
 };
 
 // ---------------------------------------------------------------- 色
@@ -409,10 +409,13 @@ function render(data, theme, icons) {
   // Combo欄（第6章）：識別子の対応表、短縮表記の正式名、Comboの補足
   const K = Object.fromEntries(data.keys.map((k) => [k.id, k]));
   const keysOf = (c) => c.keys.map((id) => K[id]?.base || id).join(words.and);
-  const comboLine = (head, c) => `${head ? head + words.colon : ''}${keysOf(c)}${words.dash}${c.text}${c.note ? words.stop + c.note : ''}`;
+  // 目的で表したレイヤー切り替えのComboは、切り替え先をCombo欄に書く（第6章）
+  const layerName = Object.fromEntries(data.layers.map((l) => [l.id, l.name]));
+  const goNote = (c) => (c.kind === 'go' && c.text !== layerName[c.layer] ? words.goTo(layerName[c.layer]) : '');
+  const comboLine = (head, c) => `${head ? head + words.colon : ''}${keysOf(c)}${words.dash}${[c.text, goNote(c), c.note].filter(Boolean).map((t, i, a) => (a.length > 1 ? end(t) : t)).join(words.stop === '。' ? '' : ' ')}`;
   const combos = [
     ...idents.map((c) => comboLine(c.letter, c)),
-    ...labels.filter((c) => c.draw?.short || c.note).map((c) => comboLine(c.draw?.short ? c.draw.text : '', c)),
+    ...labels.filter((c) => c.draw?.short || c.note || goNote(c)).map((c) => comboLine(c.draw?.short ? c.draw.text : '', c)),
   ];
   const footLines = Math.max(notes.length, combos.length);
   const kbW = (maxX - minX) * KZ, kbH = (maxY - minY) * KZ;
