@@ -21,6 +21,7 @@ const PAD = 6; // キー内側の余白
 const COL_GAP = 3; // セル同士の間隔
 const ENLARGE = [1, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3]; // 第10.4節：キー拡大の段階（最大1.3倍）
 const SHRINK = [0.95, 0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.6, 0.55, 0.5]; // 第10.4節：文字縮小の段階（読める範囲として50%まで）
+const ONE_SHOT = { size: 1.2, gap: 0.1 }; // ワンショットアイコンの大きさと間隔（文字の大きさに対する比）
 const SPLIT_GAP = 100; // 第10.1節：分割型の左右の間隔（1u）
 const ICON_FILES = { 'tap-2': 'tap-2.svg', 'tap-3': 'tap-3.svg', toggle: 'toggle.svg', to: 'to.svg', 'one-shot': 'one-shot.svg' };
 const WORDS = {
@@ -95,7 +96,7 @@ function validate(d) {
   if (!d.meta?.os) errs.push('meta.os がありません');
   if (!d.meta?.source?.repo || !d.meta?.source?.commit) errs.push('meta.source（repo と commit）がありません');
   if (!Array.isArray(d.layers)) errs.push('layers がありません');
-  else if (d.layers.length > 6) errs.push('追加レイヤーは6つまでです（第3.2節）');
+  else if (d.layers.filter((l) => l.show !== false).length > 6) errs.push('この図に表示する追加レイヤーは6つまでです。図を分け、ほかの図のレイヤーには show: false を付けてください（第3.2節）');
   if (!Array.isArray(d.keys) || !d.keys.length) errs.push('keys がありません');
   const layerIds = new Set((d.layers || []).map((l) => l.id));
   const keyIds = new Set();
@@ -105,9 +106,12 @@ function validate(d) {
     keyIds.add(k.id);
     for (const [l, v] of Object.entries(k.cells || {})) {
       if (!layerIds.has(l)) errs.push(`${k.id}: 未定義のレイヤー ${l}`);
+      else if (d.layers.find((x) => x.id === l).show === false) errs.push(`${k.id}: レイヤー ${l} はこの図に表示しない（show: false）ので、セルを書けません`);
       if (typeof v !== 'string' && typeof v?.text !== 'string') errs.push(`${k.id}: レイヤー ${l} のセルは文字列か { text, short } にしてください`);
       if (oneSymbol(v?.short)) errs.push(`${k.id}: レイヤー ${l} の短縮表記「${v.short}」は記号1文字だけです。キーの出力と取り違えるので使えません（第10.4節）`);
     }
+    if (k.base !== undefined && typeof k.base !== 'string' && typeof k.base?.text !== 'string') errs.push(`${k.id}: base は文字列か { text, icon } にしてください`);
+    for (const v of [k.base, ...Object.values(k.cells || {})]) if (v?.icon !== undefined && v.icon !== 'one-shot') errs.push(`${k.id}: 出力に付けられるアイコンは one-shot だけです: ${v.icon}`);
     if (k.note !== undefined && typeof k.note !== 'string') errs.push(`${k.id}: note は注釈の本文（文字列）にしてください。番号は描画プログラムが振ります`);
     if (k.switch && !layerIds.has(k.switch.layer)) errs.push(`${k.id}: 未定義のレイヤー ${k.switch.layer}`);
     for (const op of [...(k.taps || []), ...(k.switch ? [k.switch] : [])]) {
@@ -124,7 +128,9 @@ function validate(d) {
     if (!Array.isArray(c.keys) || c.keys.length < 2) errs.push(`Combo の keys は2つ以上必要です: ${c.text}`);
     for (const id of c.keys || []) if (!keyIds.has(id)) errs.push(`Combo「${c.text}」: 未定義のキー ${id}`);
     if (oneSymbol(c.short)) errs.push(`Combo「${c.text}」: 短縮表記「${c.short}」は記号1文字だけです。キーの出力と取り違えるので使えません（第10.4節）`);
-    if ((c.kind === 'layer' || c.kind === 'go') && !layerIds.has(c.layer)) errs.push(`Combo「${c.text}」: layer がありません`);
+    if (c.kind === 'go' && !layerIds.has(c.layer)) errs.push(`Combo「${c.text}」: layer がありません`);
+    if (c.kind === 'layer' && ![].concat(c.layer ?? []).length) errs.push(`Combo「${c.text}」: layer がありません`);
+    if (c.kind === 'layer') for (const l of [].concat(c.layer ?? [])) if (!layerIds.has(l)) errs.push(`Combo「${c.text}」: 未定義のレイヤー ${l}`);
   }
   if (errs.length) fail('中間データに誤りがあります\n- ' + errs.join('\n- '));
 }
@@ -132,7 +138,7 @@ function validate(d) {
 // ---------------------------------------------------------------- 寸法（テーマの寸法から全キー共通の配分を作る）
 function layout(theme, data, k = 1) {
   const dm = theme.dims;
-  const n = data.layers.length;
+  const n = shown(data).length;
   const rows = Math.ceil(n / 2);
   const cellH = dm.cellHeight * KS / k;
   const barH = dm.barHeight * KS / k;
@@ -178,7 +184,13 @@ function keyShape(t) {
 }
 
 // ---------------------------------------------------------------- 配色（第3.1節「色の濃淡の意味」）
+// この図に表示する追加レイヤー（第3.2節）。show: false のレイヤーはセルと凡例を持たない
+const shown = (data) => data.layers.filter((l) => l.show !== false);
+
 function palette(t, data) {
+  // 図を分けても同じレイヤーは同じ色にするため、全レイヤーの並び順で色を割り当てる。テーマの色が足りなければ color の指定を求める
+  const auto = data.layers.filter((l) => !l.color);
+  if (data.layers.length > t.layers.length && auto.length) fail(`追加レイヤーが ${data.layers.length} つあり、テーマのレイヤー色（${t.layers.length} 色）より多いため、color を指定してください: ${auto.map((l) => l.id).join(', ')}`);
   const surface = t.key.surface;
   const C = {};
   data.layers.forEach((l, i) => {
@@ -214,7 +226,7 @@ function obstacles(k, L, iconSize, opts = {}) {
   const [x0, y0] = keyBox(k);
   const o = [];
   const bfs = baseSize(k, L);
-  const bw = textWidth(k.base || '', bfs);
+  const bw = textWidth(k.base || '', bfs) + (k.baseIcon ? bfs * ONE_SHOT.size + bfs * ONE_SHOT.gap : 0);
   if (k.base) o.push([x0 + KS / 2 - bw / 2, y0 + L.baseY - bfs * 0.42, bw, bfs * 0.84]);
   Object.keys(k.cells || {}).forEach((id) => { const c = cellRect(L, k._layerIndex[id]); o.push([x0 + c[0], y0 + c[1], c[2], c[3]]); });
   opRows(k).forEach((op, i) => {
@@ -269,9 +281,10 @@ function placeCells(data, L, opts = {}) {
     for (const [id, raw] of Object.entries(k.cells || {})) {
       const c = cellOf(raw), cw = cellRect(L, k._layerIndex[id])[2];
       const v = variants(c, opts);
-      const ok = v.find((x) => textWidth(x.text, L.fs.cell * x.f) <= cw - 4);
+      const iw = (f) => (c.icon ? L.fs.cell * f * (ONE_SHOT.size + ONE_SHOT.gap) : 0);
+      const ok = v.find((x) => textWidth(x.text, L.fs.cell * x.f) + iw(x.f) <= cw - 4);
       if (!ok) failed++;
-      m[id] = { ...(ok || { text: c.short || c.text, f: SHRINK.at(-1), short: !!c.short, over: true }), full: c.text };
+      m[id] = { ...(ok || { text: c.short || c.text, f: SHRINK.at(-1), short: !!c.short, over: true }), full: c.text, icon: c.icon };
     }
     out.set(k, m);
   }
@@ -363,7 +376,7 @@ function render(data, theme, icons) {
   const P = palette(theme, data);
   const W8 = theme.dims.weights || {};
   const words = WORDS[data.meta.language] || WORDS.ja;
-  data.keys.forEach((k) => { k._layerIndex = Object.fromEntries(data.layers.map((l, i) => [l.id, i])); });
+  data.keys.forEach((k) => { k._layerIndex = Object.fromEntries(shown(data).map((l, i) => [l.id, i])); });
   // 第10.4節の順で試す：1. 文字縮小 → 2. キー拡大 → 3. 短縮表記。Comboラベルとセルの文字を一緒に判定する
   // 全て収まる最初の組み合わせを選ぶ。どれでも残る場合は、収まらない数が最も少ない最初の組み合わせを選ぶ
   // 収まらないComboは識別子方式に、収まらないセルは下限の大きさで描いて警告する
@@ -382,10 +395,16 @@ function render(data, theme, icons) {
     if (c.over) console.error(`警告: ${k.base || k.id} の ${id} セル「${c.full}」が${SHRINK.at(-1) * 100}%に縮めても収まりません。短縮表記（short）を指定してください`);
   }
 
-  const icon = (id, x, cy, color) => {
-    const ic = icons[id], s = iconSize / 24;
+  const icon = (id, x, cy, color, size = iconSize) => {
+    const ic = icons[id], s = size / 24, iconSize_ = size;
     const attrs = ic.attrs.replace(/\s(xmlns|viewBox|width|height)="[^"]*"/g, '').replace(/currentColor/g, color);
-    return `<g transform="translate(${r1(x)},${r1(cy - iconSize / 2)}) scale(${r1(s * 1000) / 1000})" ${attrs.replace(/stroke="currentColor"/g, `stroke="${color}"`)} color="${color}">${ic.inner.replace(/currentColor/g, color)}</g>`;
+    return `<g transform="translate(${r1(x)},${r1(cy - iconSize_ / 2)}) scale(${r1(s * 1000) / 1000})" ${attrs.replace(/stroke="currentColor"/g, `stroke="${color}"`)} color="${color}">${ic.inner.replace(/currentColor/g, color)}</g>`;
+  };
+  // ワンショット修飾キーは、出力の前にワンショットアイコンを付ける（第4.7節）
+  const withIcon = (ic, t, cx, cy, fs, attrs, color) => {
+    if (!ic) return text(t, `x="${r1(cx)}" y="${r1(cy + fs * 0.36)}" ${attrs} text-anchor="middle"`);
+    const sz = fs * ONE_SHOT.size, gap = fs * ONE_SHOT.gap, x = cx - (sz + gap + textWidth(t, fs)) / 2;
+    return icon(ic, x, cy, color, sz) + text(t, `x="${r1(x + sz + gap)}" y="${r1(cy + fs * 0.36)}" ${attrs}`);
   };
 
   // キーボード領域の大きさ
@@ -433,9 +452,9 @@ function render(data, theme, icons) {
       const [cx, cy, cw, ch] = cellRect(L, k._layerIndex[id]);
       const fs = L.fs.cell * c.f, v = c.text; // 縮小は下限まで（第10.4節）
       g += `<rect x="${r1(cx)}" y="${r1(cy)}" width="${r1(cw)}" height="${r1(ch)}" rx="${r1(ch * 0.3)}" fill="${P.C[id].tint}"/>`
-        + text(v, `x="${r1(cx + cw / 2)}" y="${r1(cy + ch / 2 + fs * 0.36)}" font-size="${r1(fs)}" font-weight="${W8.cell ?? 700}" fill="${P.C[id].text}" text-anchor="middle"`);
+        + withIcon(c.icon, v, cx + cw / 2, cy + ch / 2, fs, `font-size="${r1(fs)}" font-weight="${W8.cell ?? 700}" fill="${P.C[id].text}"`, P.C[id].text);
     }
-    if (k.base) { const bfs = baseSize(k, L); g += text(k.base, `x="${KS / 2}" y="${r1(L.baseY + bfs * 0.36)}" font-size="${r1(bfs)}" font-weight="${W8.base ?? 700}" fill="${P.base}" text-anchor="middle"`); }
+    if (k.base) { const bfs = baseSize(k, L); g += withIcon(k.baseIcon, k.base, KS / 2, L.baseY, bfs, `font-size="${r1(bfs)}" font-weight="${W8.base ?? 700}" fill="${P.base}"`, P.base); }
     const rows = opRows(k);
     rows.forEach((op, i) => {
       const cy = L.opY[L.opY.length - rows.length + i];
@@ -454,15 +473,27 @@ function render(data, theme, icons) {
     out += `<g transform="${tr}">${g}</g>`;
   }
   // Comboの配色（第6章）
-  const comboColor = (c) => c.kind === 'go' ? { bg: P.C[c.layer].solid, fg: '#ffffff' } : c.kind === 'layer' ? { bg: P.C[c.layer].tint, fg: P.C[c.layer].text } : { bg: P.neutral, fg: '#ffffff' };
+  // 複数の追加レイヤーで有効なComboは、各レイヤーの淡い色で左右に塗り分ける（第6章）
+  let gradN = 0;
+  const comboColor = (c) => {
+    if (c.kind === 'go') return { bg: P.C[c.layer].solid, fg: '#ffffff' };
+    if (c.kind !== 'layer') return { bg: P.neutral, fg: '#ffffff' };
+    const ls = [].concat(c.layer).sort((p, q) => data.layers.findIndex((l) => l.id === p) - data.layers.findIndex((l) => l.id === q)); // 凡例の順
+    if (ls.length === 1) return { bg: P.C[ls[0]].tint, fg: P.C[ls[0]].text };
+    const id = `kv-combo${gradN++}`, step = 100 / ls.length;
+    const stops = ls.map((l, i) => `<stop offset="${r1(i * step)}%" stop-color="${P.C[l].tint}"/><stop offset="${r1((i + 1) * step)}%" stop-color="${P.C[l].tint}"/>`).join('');
+    const fg = ls.every((l) => contrast(P.base, P.C[l].tint) >= 4.5) ? P.base : '#000000';
+    return { bg: `url(#${id})`, fg, defs: `<defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="0">${stops}</linearGradient></defs>` };
+  };
   for (const c of labels) {
     const [x, y, w, h] = c.rect, col = comboColor(c), fsz = L.fs.label * c.draw.f;
-    out += `<rect x="${r1(OX + x)}" y="${r1(OY + y)}" width="${r1(w)}" height="${r1(h)}" rx="${r1(h / 2)}" fill="${col.bg}"/>`
+    out += (col.defs || '') + `<rect x="${r1(OX + x)}" y="${r1(OY + y)}" width="${r1(w)}" height="${r1(h)}" rx="${r1(h / 2)}" fill="${col.bg}"/>`
       + text(c.draw.text, `x="${r1(OX + x + w / 2)}" y="${r1(OY + y + h / 2 + fsz * 0.36)}" font-size="${r1(fsz)}" font-weight="${W8.label ?? 700}" fill="${col.fg}" text-anchor="middle"`);
   }
   const stack = {};
   for (const c of idents) {
     const col = comboColor(c);
+    out += col.defs || '';
     for (const k of c.members) {
       const n = (stack[k.id] = (stack[k.id] || 0) + 1) - 1;
       const s = L.fs.label + 4, x = OX + k.x + IN + KS - s / 2, y = OY + k.y + IN + L.baseY - s / 2 + n * (s + 2);
@@ -484,7 +515,7 @@ function render(data, theme, icons) {
   let head = text(title, `x="${M}" y="74" font-size="30" font-weight="${W8.base ?? 700}" fill="${P.base}"`)
     + text(`${words.source}：${m.source.repo} @ ${m.source.commit}${m.source.path ? `（${m.source.path}）` : ''}　${words.spec}：${m.spec || 'キーマップ可視化 デザインルール v0.2'}`, `x="${M}" y="104" font-size="12.5" font-weight="${W8.sub ?? 500}" fill="${P.sub}"`);
   let lx = M;
-  for (const l of data.layers) {
+  for (const l of shown(data)) {
     const c = P.C[l.id], w = textWidth(l.name, 12) + 22;
     head += `<rect x="${r1(lx)}" y="128" width="${r1(w)}" height="22" rx="6" fill="${c.solid}"/>` + text(l.name, `x="${r1(lx + w / 2)}" y="143.5" font-size="12" font-weight="${W8.op ?? 700}" fill="#ffffff" text-anchor="middle"`);
     lx += w + 10;
@@ -529,5 +560,6 @@ if (args.help || !args.data) {
 }
 const data = loadJSON(args.data, '中間データ');
 validate(data);
+for (const k of data.keys) if (k.base && typeof k.base === 'object') { k.baseIcon = k.base.icon; k.base = k.base.text; }
 const svg = render(compressSplit(data), loadTheme(args.theme), loadIcons());
 if (args.out) fs.writeFileSync(args.out, svg); else process.stdout.write(svg);

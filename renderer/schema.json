@@ -34,8 +34,7 @@
     },
     "layers": {
       "type": "array",
-      "description": "追加レイヤー。並び順が表示スロットの順（第3.2節）",
-      "maxItems": 6,
+      "description": "追加レイヤー。並び順が表示スロットの順（第3.2節）。図を分ける場合は、すべての図に全レイヤーを同じ順で書き、この図に表示しないレイヤーには show: false を付ける。表示するレイヤーは6つまで",
       "items": {
         "type": "object",
         "required": ["id", "name"],
@@ -43,7 +42,8 @@
         "properties": {
           "id": { "type": "string", "description": "データ内で参照するための識別子" },
           "name": { "type": "string", "description": "表示名（第3.1節）" },
-          "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$", "description": "レイヤー色。省略時はテーマのレイヤー色を順に使う" }
+          "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$", "description": "レイヤー色。省略時はテーマのレイヤー色を順に使う" },
+          "show": { "type": "boolean", "default": true, "description": "false にすると、この図ではセルを持たず、凡例にも載せない。レイヤー切り替えやComboの色と名前には使う（第3.2節）" }
         }
       }
     },
@@ -62,10 +62,16 @@
           "rot": { "type": "number", "description": "回転角（度、時計回り）" },
           "rx": { "type": "number", "description": "回転の中心の横位置（省略時はキーの中心）" },
           "ry": { "type": "number", "description": "回転の中心の縦位置（省略時はキーの中心）" },
-          "base": { "type": "string", "description": "基本入力" },
+          "base": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "object", "required": ["text"], "additionalProperties": false, "properties": { "text": { "type": "string" }, "icon": { "const": "one-shot", "description": "ワンショット修飾キー（第4.7節）" } } }
+            ],
+            "description": "基本入力。ワンショット修飾キーは { text, icon: \"one-shot\" }"
+          },
           "cells": {
             "type": "object",
-            "description": "追加レイヤーの出力。キーはレイヤーの id。長い名前には短縮表記を添えられる",
+            "description": "追加レイヤーの出力。キーはレイヤーの id。長い名前には短縮表記を、ワンショット修飾キーにはアイコンを添えられる",
             "additionalProperties": {
               "oneOf": [
                 { "type": "string" },
@@ -75,6 +81,7 @@
                   "additionalProperties": false,
                   "properties": {
                     "text": { "type": "string", "description": "正式名" },
+                    "icon": { "const": "one-shot", "description": "ワンショット修飾キー（第4.7節）" },
                     "short": { "type": "string", "description": "短縮表記。セルに収まらないときに描画プログラムが使い、正式名をそのキーの注釈に載せる（第10.4節）。記号1文字だけにはしない" }
                   }
                 }
@@ -125,7 +132,7 @@
             "enum": ["base", "layer", "go"],
             "description": "base：レイヤーに関係なく有効／layer：そのレイヤーにいる間だけ有効／go：そのレイヤーへ行く（第3.1節）"
           },
-          "layer": { "type": "string", "description": "kind が layer・go のときのレイヤーの id" }
+          "layer": { "oneOf": [{ "type": "string" }, { "type": "array", "minItems": 2, "items": { "type": "string" } }], "description": "kind が layer・go のときのレイヤーの id。layer で複数の追加レイヤーで有効な場合は配列にする（go は1つだけ）" }
         },
         "allOf": [
           { "if": { "properties": { "kind": { "enum": ["layer", "go"] } } }, "then": { "required": ["layer"] } }
