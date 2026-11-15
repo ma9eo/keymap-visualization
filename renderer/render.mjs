@@ -4,14 +4,14 @@
 //
 //   node renderer/render.mjs <中間データ.json> [--theme <名前|パス>] [-o <出力.svg>]
 //
-// --theme を省略すると既定テーマ（docs/themes/clay.json）を使う。
+// --theme を省略すると既定テーマ（themes/clay.json）を使う。
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const THEMES = path.resolve(HERE, '../docs/themes');
+const THEMES = path.resolve(HERE, '../themes');
 
 // ---------------------------------------------------------------- 定数
 const PITCH = 100; // 座標の単位。1u = 100
@@ -75,7 +75,7 @@ function loadTheme(name) {
 }
 
 function loadIcons() {
-  const dir = path.resolve(HERE, '../docs/icons');
+  const dir = path.resolve(HERE, '../icons');
   const out = {};
   for (const [id, file] of Object.entries(ICON_FILES)) {
     const src = fs.readFileSync(path.join(dir, file), 'utf8');

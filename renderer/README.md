@@ -1,6 +1,6 @@
 # 描画プログラム
 
-キーマップ可視化 デザインルール（`docs/keymap-visualization.md`）の参照実装です。中間データ（JSON）とテーマ（JSON）から、仕様どおりのSVGを描きます。正本は仕様で、仕様とこのプログラムが食い違う場合はプログラムを直します（第10.10節）。
+キーマップ可視化 デザインルール（`spec.md`）の参照実装です。中間データ（JSON）とテーマ（JSON）から、仕様どおりのSVGを描きます。正本は仕様で、仕様とこのプログラムが食い違う場合はプログラムを直します（第10.10節）。
 
 ## 使い方
 
@@ -12,7 +12,7 @@ node renderer/render.mjs renderer/examples/torabo-tsuki-lp-xs-windows.json -o ke
 
 | オプション | 内容 |
 |---|---|
-| `--theme <名前\|パス>` | テーマ。名前なら `docs/themes/<名前>.json` を使う。省略すると既定テーマ（`clay`） |
+| `--theme <名前\|パス>` | テーマ。名前なら `themes/<名前>.json` を使う。省略すると既定テーマ（`clay`） |
 | `-o <パス>` | 出力先。省略すると標準出力に書く |
 
 ## 流れ
@@ -29,8 +29,8 @@ node renderer/render.mjs renderer/examples/torabo-tsuki-lp-xs-windows.json -o ke
 | `render.mjs` | 描画プログラム本体 |
 | `schema.json` | 中間データの JSON Schema |
 | `examples/torabo-tsuki-lp-xs-windows.json` | 中間データの例（torabo-tsuki LP XS、Windows） |
-| `../docs/themes/*.json` | テーマ |
-| `../docs/icons/*.svg` | 操作アイコン |
+| `../themes/*.json` | テーマ |
+| `../icons/*.svg` | 操作アイコン |
 
 ## 中間データの検証
 
