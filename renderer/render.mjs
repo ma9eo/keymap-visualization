@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// キーマップ可視化 デザインルール v0.2 の参照実装
+// キーマップ可視化 デザインルール v0.3 の参照実装
 // 中間データ（JSON）とテーマ（JSON）から SVG を描く。外部ライブラリは使わない。
 //
 //   node renderer/render.mjs <中間データ.json> [--theme <名前|パス>] [-o <出力.svg>]
@@ -562,7 +562,7 @@ function render(data, theme, icons) {
   const sep = /[\u3000-\u9fff\uff00-\uffef]$/.test(m.keyboard) ? '' : ' ';
   const title = m.title || `${m.keyboard}${sep}${words.keymap} — ${m.os}`;
   let head = text(title, `x="${M}" y="74" font-size="30" font-weight="${W8.base ?? 700}" fill="${P.base}"`)
-    + text(`${words.source}：${m.source.repo} @ ${m.source.commit}${m.source.path ? `（${m.source.path}）` : ''}　${words.spec}：${m.spec || 'キーマップ可視化 デザインルール v0.2'}`, `x="${M}" y="104" font-size="12.5" font-weight="${W8.sub ?? 500}" fill="${P.sub}"`);
+    + text(`${words.source}：${m.source.repo} @ ${m.source.commit}${m.source.path ? `（${m.source.path}）` : ''}　${words.spec}：${m.spec || 'キーマップ可視化 デザインルール v0.3'}`, `x="${M}" y="104" font-size="12.5" font-weight="${W8.sub ?? 500}" fill="${P.sub}"`);
   let lx = M;
   for (const l of shown(data)) {
     const c = P.C[l.id], w = textWidth(l.name, 12) + 22;
