@@ -15,7 +15,7 @@
       "additionalProperties": false,
       "properties": {
         "keyboard": { "type": "string", "description": "キーボード名（実機のサイズを含む）" },
-        "split": { "type": "boolean", "description": "分割型なら true、一体型なら false（第10.0節）。キーの間隔からは推定しない。true のときは、左半分と右半分が横方向に重ならず、間が1u以上空く座標で keys を書く（第10.10節）" },
+        "split": { "type": "boolean", "description": "分割型なら true、一体型なら false（第10.0節）。キーの間隔からは推定しない。true のときは、左半分と右半分のキーの横位置（回転前の x）が1u以上離れた座標で keys を書く（第10.10節）" },
         "os": { "type": "string", "description": "対象OS" },
         "language": { "type": "string", "enum": ["ja", "en"], "default": "ja", "description": "表示言語" },
         "hostLayout": { "type": "string", "description": "ホストのキーボード配列（US・JISなど）。記号の解釈に使った値を記録する。キーマップビジュアルには表示しない" },

@@ -298,7 +298,7 @@ function obstacles(k, L, iconSize, opts = {}) {
     else { const w = textWidth(op.text, L.fs.op) + (op.icon ? iconSize + 2.5 : 0); o.push([x0 + KS / 2 - w / 2, y0 + y - L.fs.op * 0.6, w, L.fs.op * 1.2]); }
   });
   if (hasMark(k, opts)) { const [mx, my] = markPos(k, L); o.push([mx - 1, my - 1, L.mark + 2, L.mark + 2]); }
-  return o;
+  return o.map((r) => rotRect(k, r));
 }
 // 注釈マーカーは、中心をキーの右下の角の縁（角丸なら丸みの縁）に合わせて置く（第8.1節）。外へのはみ出しはキー間隔までにする
 const markInset = (L) => Math.max(L.mark / 2 + L.radius * (1 - Math.SQRT1_2), L.mark - (PITCH - KS));
@@ -402,7 +402,7 @@ function placeCombos(data, L, iconSize, opts = {}) {
   const cnt = {};
   for (const c of idents) for (const k of c.members) {
     const n = (cnt[k.id] = (cnt[k.id] || 0) + 1) - 1, sz = L.fs.label + 4, w = identWidth((data.combos || []).length > 26 ? 'AA' : 'A', L.fs.label);
-    identRects.push([identX(k, w), k.y + IN + L.baseY - sz / 2 + identDy(k, n, sz, opts, L), w, sz]);
+    identRects.push(rotRect(k, [identX(k, w), k.y + IN + L.baseY - sz / 2 + identDy(k, n, sz, opts, L), w, sz]));
   }
   // 配置済みのComboラベルも避ける（第6.1節）
   const placedRects = [];
@@ -442,22 +442,35 @@ function splitX(keys) {
   return best;
 }
 
-// 分割型は、左右の間隔を実際の距離ではなく SPLIT_GAP に詰める（第10.1節）。左右それぞれの中の配置は変えない
-function keyCorners(k) {
-  const [x0, y0] = keyBox(k), pts = [[x0, y0], [x0 + KS, y0], [x0, y0 + KS], [x0 + KS, y0 + KS]];
-  if (!k.rot) return pts;
+// キーの回転（第10.1節）。点をキーと同じ中心・角度で回す
+function rotPt(k, [x, y]) {
+  if (!k.rot) return [x, y];
   const cx = k.rx ?? k.x + PITCH / 2, cy = k.ry ?? k.y + PITCH / 2, a = (k.rot * Math.PI) / 180;
-  return pts.map(([x, y]) => [cx + (x - cx) * Math.cos(a) - (y - cy) * Math.sin(a), cy + (x - cx) * Math.sin(a) + (y - cy) * Math.cos(a)]);
+  return [cx + (x - cx) * Math.cos(a) - (y - cy) * Math.sin(a), cy + (x - cx) * Math.sin(a) + (y - cy) * Math.cos(a)];
+}
+// 回転後のキーの四隅と中心
+function keyCorners(k) {
+  const [x0, y0] = keyBox(k);
+  return [[x0, y0], [x0 + KS, y0], [x0, y0 + KS], [x0 + KS, y0 + KS]].map((p) => rotPt(k, p));
+}
+const keyCenter = (k) => rotPt(k, [k.x + PITCH / 2, k.y + PITCH / 2]);
+// キーに付く矩形（キーの座標系）を、回転後の外接矩形にする。回転したキーの識別子などの衝突判定に使う
+function rotRect(k, [x, y, w, h]) {
+  if (!k.rot) return [x, y, w, h];
+  const ps = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]].map((p) => rotPt(k, p));
+  const xs = ps.map((p) => p[0]), ys = ps.map((p) => p[1]);
+  return [Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
 }
 // 分割型かどうかは入力の meta.split に従い、キーの間隔から推定しない（第10.0節）。一体型は間隔を詰めず、採番も全体を1つとして扱う
 // 採番に使う行（第8.2節）。縦位置を丸めるのではなく、隣の列との対応で決める
 // 列ごとに縦にずらした配列（小指列が下がっているなど）でも、同じ段のキーが同じ行になる
 function assignRows(keys) {
   for (const side of new Set(keys.map((k) => k._side))) {
-    const ks = keys.filter((k) => k._side === side).sort((a, b) => a.x - b.x);
+    // 回転したキーは、回転後の中心で並べる。列の中で少しずつ横にずれていく回転した列も、隣のキーとの差でつないで1つの列にする
+    const ks = keys.filter((k) => k._side === side).map((k) => { const [cx, cy] = keyCenter(k); return { k, cx, cy }; }).sort((a, b) => a.cx - b.cx);
     const cols = [];
-    for (const k of ks) { const c = cols.at(-1); if (c && k.x - c.x <= 25) c.keys.push(k); else cols.push({ x: k.x, keys: [k] }); }
-    cols.forEach((c) => c.keys.sort((a, b) => a.y - b.y));
+    for (const e of ks) { const c = cols.at(-1); if (c && e.cx - c.last <= 25) { c.items.push(e); c.last = e.cx; } else cols.push({ x: e.cx, last: e.cx, items: [e] }); }
+    cols.forEach((c) => { c.items.sort((a, b) => a.cy - b.cy); c.keys = c.items.map((e) => Object.assign(e.k, { _cy: e.cy })); });
     // キーの数が最も多い列（同数なら左の列）を基準にし、上から 0, 1, 2… 行とする
     const start = cols.reduce((b, c) => (c.keys.length > b.keys.length ? c : b), cols[0]);
     start.keys.forEach((k, i) => { k._row = i; });
@@ -471,11 +484,11 @@ function assignRows(keys) {
       const refs = done.filter((d) => d.keys.length > 1);
       const ref = (refs.length ? refs : done).reduce((b, d) => (Math.abs(d.x - c.x) < Math.abs(b.x - c.x) ? d : b));
       // キーの数が同じで、どの段のずれも1u未満なら、上から同じ順の行とみなす（ずらした列）
-      if (c.keys.length === ref.keys.length && c.keys.every((k, i) => Math.abs(k.y - ref.keys[i].y) < PITCH)) c.keys.forEach((k, i) => { k._row = ref.keys[i]._row; });
+      if (c.keys.length === ref.keys.length && c.keys.every((k, i) => Math.abs(k._cy - ref.keys[i]._cy) < PITCH)) c.keys.forEach((k, i) => { k._row = ref.keys[i]._row; });
       // それ以外は、縦位置が最も近いキーの行から、離れている分だけ行をずらす
       else for (const k of c.keys) {
-        const n = ref.keys.reduce((b, r) => (Math.abs(r.y - k.y) < Math.abs(b.y - k.y) ? r : b), ref.keys[0]);
-        k._row = n._row + steps(k.y - n.y);
+        const n = ref.keys.reduce((b, r) => (Math.abs(r._cy - k._cy) < Math.abs(b._cy - k._cy) ? r : b), ref.keys[0]);
+        k._row = n._row + steps(k._cy - n._cy);
       }
       done.push(c);
     }
@@ -486,11 +499,12 @@ function assignRows(keys) {
 function compressSplit(data) {
   if (!data.meta.split) return { ...data, keys: assignRows(data.keys.map((k) => ({ ...k, _side: 0 }))) };
   const { gap, at: split } = splitX(data.keys);
-  if (gap <= PITCH) fail('meta.split が true ですが、左右のキーの間が空いていません。左半分と右半分が横方向に重ならず、間が1u以上空く座標にしてください（第10.10節）');
+  if (gap <= PITCH) fail('meta.split が true ですが、左右のキーの間が空いていません。左半分と右半分のキーの横位置が1u以上離れた座標にしてください（第10.10節）');
   const right = (k) => k.x + KS / 2 >= split;
   const leftEdge = Math.max(...data.keys.filter((k) => !right(k)).flatMap((k) => keyCorners(k).map((p) => p[0])));
   const rightEdge = Math.min(...data.keys.filter(right).flatMap((k) => keyCorners(k).map((p) => p[0])));
-  const dx = Math.max(0, rightEdge - leftEdge - (SPLIT_GAP - (PITCH - KS)));
+  // 回転後の外形で最も近いところ同士の間隔を、キー1つ分（KS）にする。詰めるだけでなく、足りなければ広げる
+  const dx = rightEdge - leftEdge - (SPLIT_GAP - (PITCH - KS));
   const keys = data.keys.map((k) => (right(k) ? { ...k, _side: 1, x: k.x - dx, ...(k.rx !== undefined ? { rx: k.rx - dx } : {}) } : { ...k, _side: 0 }));
   return { ...data, keys: assignRows(keys) };
 }
@@ -575,8 +589,10 @@ function render(data, theme, icons, best, i) {
   };
 
   // キーボード領域の大きさ
-  const minX = Math.min(...data.keys.map((k) => k.x)), minY = Math.min(...data.keys.map((k) => k.y));
-  const maxX = Math.max(...data.keys.map((k) => k.x + PITCH)), maxY = Math.max(...data.keys.map((k) => k.y + PITCH + (k.rot ? 20 : 0)));
+  // キーボード領域の大きさは、回転後のキーの外形から求める（外側にキー間隔の半分の余白を足す）
+  const corners = data.keys.flatMap(keyCorners);
+  const minX = Math.min(...corners.map((p) => p[0])) - IN, minY = Math.min(...corners.map((p) => p[1])) - IN;
+  const maxX = Math.max(...corners.map((p) => p[0])) + IN, maxY = Math.max(...corners.map((p) => p[1])) + IN;
   const M = 70, HEAD = 190, KZ = L.k;
   const OX = -minX, OY = -minY;
   // 注釈（第8章）：キーの注釈を採番する。まったく同じ本文の注釈は1つの番号にまとめ、該当するすべてのキーに同じ番号を付ける
@@ -725,7 +741,9 @@ function render(data, theme, icons, best, i) {
     for (const k of c.members) {
       const n = (stack[k.id] = (stack[k.id] || 0) + 1) - 1;
       const s = L.fs.label + 4, w = identWidth(c.letter, L.fs.label), x = OX + identX(k, w), y = OY + k.y + IN + L.baseY - s / 2 + identDy(k, n, s, best.opts, L);
-      out += `<rect x="${r1(x)}" y="${r1(y)}" width="${r1(w)}" height="${r1(s)}" rx="${r1(s * COMBO_R)}" fill="${col.bg}"/>` + text(c.letter, `x="${r1(x + w / 2)}" y="${r1(y + s / 2 + L.fs.label * 0.36)}" font-size="${r1(L.fs.label)}" font-weight="${W8.label ?? 700}" fill="${col.fg}" text-anchor="middle"`);
+      const id = `<rect x="${r1(x)}" y="${r1(y)}" width="${r1(w)}" height="${r1(s)}" rx="${r1(s * COMBO_R)}" fill="${col.bg}"/>` + text(c.letter, `x="${r1(x + w / 2)}" y="${r1(y + s / 2 + L.fs.label * 0.36)}" font-size="${r1(L.fs.label)}" font-weight="${W8.label ?? 700}" fill="${col.fg}" text-anchor="middle"`);
+      // 回転したキーでは、キーと同じ中心・角度で回す（第6.2節）
+      out += k.rot ? `<g transform="rotate(${k.rot},${r1(OX + (k.rx ?? k.x + PITCH / 2))},${r1(OY + (k.ry ?? k.y + PITCH / 2))})">${id}</g>` : id;
     }
   }
 
