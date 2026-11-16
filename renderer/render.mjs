@@ -28,8 +28,8 @@ const ONE_SHOT = { size: 1.2, gap: 0.1 }; // ワンショットアイコンの�
 const SPLIT_GAP = 100; // 第10.1節：分割型の左右の間隔（1u）
 const ICON_FILES = { 'tap-2': 'tap-2.svg', 'tap-3': 'tap-3.svg', toggle: 'toggle.svg', to: 'to.svg', 'one-shot': 'one-shot.svg' };
 const WORDS = {
-  ja: { keymap: 'キーマップ', source: '出典', spec: '仕様', notes: '注釈', combo: 'Combo', and: '＋', dash: ' — ', colon: '：', stop: '。', goTo: (n) => `${n}レイヤーへ切り替える`, holdIn: (n, t) => `${n}で長押し：${t}` },
-  en: { keymap: 'Keymap', source: 'Source', spec: 'Spec', notes: 'Notes', combo: 'Combos', and: '+', dash: ' — ', colon: ': ', stop: '. ', goTo: (n) => `Switches to the ${n} layer`, holdIn: (n, t) => `Hold in ${n}: ${t}` },
+  ja: { keymap: 'キーマップ', source: '出典', spec: '仕様', notes: '注釈', combo: 'Combo', and: '＋', dash: ' — ', colon: '：', stop: '。', goTo: (n) => `${n}レイヤーへ切り替える`, holdIn: (n, t) => `${n}で長押し：${t}`, viaGo: { toggle: (n) => `${n}レイヤーをトグルで切り替える`, to: (n) => `${n}レイヤーへ移動する`, 'one-shot': (n) => `次の1キーだけ${n}レイヤーにする` } },
+  en: { keymap: 'Keymap', source: 'Source', spec: 'Spec', notes: 'Notes', combo: 'Combos', and: '+', dash: ' — ', colon: ': ', stop: '. ', goTo: (n) => `Switches to the ${n} layer`, holdIn: (n, t) => `Hold in ${n}: ${t}`, viaGo: { toggle: (n) => `Toggles the ${n} layer`, to: (n) => `Moves to the ${n} layer`, 'one-shot': (n) => `Activates the ${n} layer for the next key` } },
 };
 
 // ---------------------------------------------------------------- 色
@@ -130,8 +130,8 @@ function validate(d) {
     if (k.base !== undefined && typeof k.base !== 'string' && typeof k.base?.text !== 'string') errs.push(`${k.id}: base は文字列か { text, icon } にしてください`);
     for (const v of [k.base, ...Object.values(k.cells || {})]) if (v?.icon !== undefined && v.icon !== 'one-shot') errs.push(`${k.id}: 出力に付けられるアイコンは one-shot だけです: ${v.icon}`);
     if (k.note !== undefined && typeof k.note !== 'string') errs.push(`${k.id}: note は注釈の本文（文字列）にしてください。番号は描画プログラムが振ります`);
-    if (k.switch && !layerIds.has(k.switch.layer)) errs.push(`${k.id}: 未定義のレイヤー ${k.switch.layer}`);
-    for (const op of [...(k.taps || []), ...(k.switch ? [k.switch] : [])]) {
+    for (const sw of switches(k)) if (!layerIds.has(sw.layer)) errs.push(`${k.id}: 未定義のレイヤー ${sw.layer}`);
+    for (const op of [...(k.taps || []), ...switches(k)]) {
       const icon = op.via ?? op.icon;
       if (icon && icon !== 'hold' && !ICON_FILES[icon]) errs.push(`${k.id}: 未知の操作 ${icon}`);
     }
@@ -146,6 +146,7 @@ function validate(d) {
     for (const id of c.keys || []) if (!keyIds.has(id)) errs.push(`Combo「${c.text}」: 未定義のキー ${id}`);
     if (oneSymbol(c.short)) errs.push(`Combo「${c.text}」: 短縮表記「${c.short}」は記号1文字だけです。キーの出力と取り違えるので使えません（第10.4節）`);
     if (c.kind === 'go' && !layerIds.has(c.layer)) errs.push(`Combo「${c.text}」: layer がありません`);
+    if (c.via !== undefined && (c.kind !== 'go' || !['hold', 'toggle', 'to', 'one-shot'].includes(c.via))) errs.push(`Combo「${c.text}」: via は kind が go のときに hold・toggle・to・one-shot のいずれかで書いてください`);
     if (c.kind === 'layer' && ![].concat(c.layer ?? []).length) errs.push(`Combo「${c.text}」: layer がありません`);
     if (c.kind === 'layer') for (const l of [].concat(c.layer ?? [])) if (!layerIds.has(l)) errs.push(`Combo「${c.text}」: 未定義のレイヤー ${l}`);
   }
@@ -254,7 +255,13 @@ function isVerticalPair(a, b) {
   return Math.abs(u.y - t.y - PITCH) < PITCH * 0.25 && overlap > PITCH * 0.3;
 }
 // 境界上のComboラベルの幅。1文字のラベルが小さな丸に見えて読みにくくならないよう、最小幅を設ける（第5章）
-const labelWidth = (t, fsz) => Math.max(textWidth(t, fsz) + fsz * LABEL_PAD, fsz * LABEL_MIN_W);
+// Comboの識別子。英大文字で、26個を超えたら27個目から AA、AB…の2文字にする（第6.2節）
+const identLetter = (i) => (i < 26 ? String.fromCharCode(65 + i) : identLetter(Math.floor(i / 26) - 1) + String.fromCharCode(65 + (i % 26)));
+// 識別子の幅。1文字は高さと同じ幅、2文字は文字に合わせて横に広げる
+const identWidth = (t, fsz) => Math.max(fsz + 4, [...t].length > 1 ? textWidth(t, fsz) + fsz * 0.6 : 0);
+const labelWidth = (t, fsz, icon = false) => Math.max(textWidth(t, fsz) + fsz * LABEL_PAD + (icon ? fsz * (ONE_SHOT.size + ONE_SHOT.gap) : 0), fsz * LABEL_MIN_W);
+// レイヤー切り替えのComboで、長押し以外の操作で切り替えるものは、ラベルに操作記号を付ける（第6章）
+const comboIcon = (c) => (c.kind === 'go' && c.via && c.via !== 'hold' ? c.via : null);
 
 function obstacles(k, L, iconSize, opts = {}) {
   const [x0, y0] = keyBox(k);
@@ -292,7 +299,7 @@ function opRows(k) {
   const lh = Object.entries(k.cells || {}).filter(([, v]) => v?.hold).sort(([a], [b]) => (k._layerIndex?.[a] ?? 0) - (k._layerIndex?.[b] ?? 0));
   for (const [layer, v] of lh) rows.push({ kind: 'lhold', layer, text: v.hold });
   for (const t of k.taps || []) rows.push({ kind: 'tap', icon: t.icon, text: t.text });
-  if (k.switch) rows.push({ kind: 'switch', layer: k.switch.layer, icon: k.switch.via && k.switch.via !== 'hold' ? k.switch.via : null });
+  for (const sw of switches(k)) rows.push({ kind: 'switch', layer: sw.layer, icon: sw.via && sw.via !== 'hold' ? sw.via : null });
   return rows;
 }
 
@@ -314,6 +321,8 @@ function variants(c, opts) {
 }
 
 // セルは文字列か { text, short }（第10.10節）
+// レイヤー切り替えは1つか配列で書ける（第4.3節）
+const switches = (k) => [].concat(k.switch ?? []);
 const cellOf = (v) => (typeof v === 'string' ? { text: v } : v);
 
 // セルの表記を決める（第10.4節）。どれでも収まらなければ下限の大きさで描き、警告の対象にする
@@ -352,7 +361,7 @@ function placeCombos(data, L, iconSize, opts = {}) {
   const vSpan = (c) => [Math.max(c.a.x, c.b.x) + IN, Math.min(c.a.x, c.b.x) + IN + KS];
   const rect = (c, cand, v = { text: c.text, f: 1 }) => {
     const fsz = L.fs.label * v.f, h = fsz + 4;
-    const w = labelWidth(v.text, fsz);
+    const w = labelWidth(v.text, fsz, !!comboIcon(c));
     if (c.dir === 'v') { const [l, r] = vSpan(c); return [(l + r) / 2 - w / 2, (c.a.y + IN + KS + c.b.y + IN) / 2 - h / 2, w, h]; }
     const cx = (c.a.x + IN + KS + c.b.x + IN) / 2;
     const ay = c.a.y + IN + cand.y, by = c.b.y + IN + cand.y;
@@ -364,8 +373,8 @@ function placeCombos(data, L, iconSize, opts = {}) {
   const identRects = [];
   const cnt = {};
   for (const c of idents) for (const k of c.members) {
-    const n = (cnt[k.id] = (cnt[k.id] || 0) + 1) - 1, sz = L.fs.label + 4;
-    identRects.push([k.x + IN + KS - sz / 2, k.y + IN + L.baseY - sz / 2 + identDy(k, n, sz, opts, L), sz, sz]);
+    const n = (cnt[k.id] = (cnt[k.id] || 0) + 1) - 1, sz = L.fs.label + 4, w = identWidth((data.combos || []).length > 26 ? 'AA' : 'A', L.fs.label);
+    identRects.push([k.x + IN + KS - w / 2, k.y + IN + L.baseY - sz / 2 + identDy(k, n, sz, opts, L), w, sz]);
   }
   // 配置済みのComboラベルも避ける（第6.1節）
   const placedRects = [];
@@ -386,7 +395,7 @@ function placeCombos(data, L, iconSize, opts = {}) {
   // 識別子は英大文字。左半分→右半分、上の行→下の行、左→右（第6.2節・第8.2節）
   const { order, cmp } = keyOrder();
   idents.sort((p, q) => cmp(order(p.members.slice().sort((x, y) => cmp(order(x), order(y)))[0]), order(q.members.slice().sort((x, y) => cmp(order(x), order(y)))[0])));
-  idents.forEach((c, i) => { c.letter = String.fromCharCode(65 + i); });
+  idents.forEach((c, i) => { c.letter = identLetter(i); });
   return { labels: labels.filter((c) => c.rect), idents, failed: fallback.length };
 }
 
@@ -531,14 +540,14 @@ function render(data, theme, icons) {
   const keysOf = (c) => c.keys.map((id) => K[id]?.base || id).join(words.and);
   // 目的で表したレイヤー切り替えのComboは、切り替え先をCombo欄に書く（第6章）
   const layerName = Object.fromEntries(data.layers.map((l) => [l.id, l.name]));
-  const goNote = (c) => (c.kind === 'go' && c.text !== layerName[c.layer] ? words.goTo(layerName[c.layer]) : '');
+  const goNote = (c) => (c.letter && comboIcon(c) ? words.viaGo[c.via](layerName[c.layer]) : c.kind === 'go' && c.text !== layerName[c.layer] ? words.goTo(layerName[c.layer]) : '');
   const comboLine = (c) => `${keysOf(c)}${words.dash}${[c.text, goNote(c), c.note].filter(Boolean).map((t, i, a) => (a.length > 1 ? end(t) : t)).join(words.stop === '。' ? '' : ' ')}`;
   // Combo欄の各行の頭には、キーマップ上と同じ見た目のマーク（識別子、またはラベル）を付ける
   const HEAD_FS = 9.5, HEAD_H = 13, HEAD_GAP = 9;
-  const headW = (h) => (h.kind === 'ident' ? HEAD_H : labelWidth(h.text, HEAD_FS));
+  const headW = (h) => (h.kind === 'ident' ? identWidth(h.text, HEAD_H - 4) : labelWidth(h.text, HEAD_FS, !!h.icon));
   const combos = [
     ...idents.map((c) => ({ c, head: { kind: 'ident', text: c.letter }, body: comboLine(c) })),
-    ...labels.filter((c) => c.draw?.short || c.note || goNote(c)).map((c) => ({ c, head: { kind: 'label', text: c.draw.text }, body: comboLine(c) })),
+    ...labels.filter((c) => c.draw?.short || c.note || goNote(c)).map((c) => ({ c, head: { kind: 'label', text: c.draw.text, icon: comboIcon(c) }, body: comboLine(c) })),
   ];
   const kbW = (maxX - minX) * KZ, kbH = (maxY - minY) * KZ;
   const W = Math.max(kbW + M * 2, 900);
@@ -546,13 +555,17 @@ function render(data, theme, icons) {
   // 注釈欄とCombo欄は、欄の幅で折り返す。行が増えた分はキャンバスを縦に延ばす（第8.3節）
   const FOOT_FS = 12.5, FOOT_LH = 18, FOOT_GAP = 4, MARK_W = 22, FOOT_COL_GAP = 40;
   const colX = [M, notes.length ? Math.max(M + 520, W / 2) : M];
-  const noteW = (combos.length ? colX[1] - FOOT_COL_GAP : W - M) - (M + MARK_W), comboW = W - M - colX[1];
+  // 多くのComboに共通の有効条件は、Combo欄の先頭に1回だけ書く（第10.7節）
+  const comboCommon = data.comboNote && data.combos?.length ? data.comboNote : '';
+  const hasCombo = combos.length > 0 || !!comboCommon;
+  const noteW = (hasCombo ? colX[1] - FOOT_COL_GAP : W - M) - (M + MARK_W), comboW = W - M - colX[1];
+  const commonLines = comboCommon ? wrap(comboCommon, comboW, FOOT_FS) : [];
   notes.forEach((n) => { n.lines = wrap(n.text, noteW, FOOT_FS); });
   combos.forEach((it) => { it.lines = wrap(it.body, comboW - headW(it.head) - HEAD_GAP, FOOT_FS); });
   const comboItems = combos.map((it) => it.lines);
   const colH = (items) => items.reduce((h, ls) => h + ls.length * FOOT_LH + FOOT_GAP, 0);
-  const footH = Math.max(colH(notes.map((n) => n.lines)), colH(comboItems));
-  const H = footTop + (notes.length || combos.length ? 60 + footH : 0) + 40;
+  const footH = Math.max(colH(notes.map((n) => n.lines)), colH(commonLines.length ? [commonLines, ...comboItems] : comboItems));
+  const H = footTop + (notes.length || hasCombo ? 60 + footH : 0) + 40;
 
   let out = '';
   // 使っていないキー（第9.0.1節）は、実機の形を伝えるため、文字のない薄い枠として描く
@@ -611,7 +624,7 @@ function render(data, theme, icons) {
   for (const c of labels) {
     const [x, y, w, h] = c.rect, col = comboColor(c), fsz = L.fs.label * c.draw.f;
     out += (col.defs || '') + `<rect x="${r1(OX + x)}" y="${r1(OY + y)}" width="${r1(w)}" height="${r1(h)}" rx="${r1(h * COMBO_R)}" fill="${col.bg}"/>`
-      + text(c.draw.text, `x="${r1(OX + x + w / 2)}" y="${r1(OY + y + h / 2 + fsz * 0.36)}" font-size="${r1(fsz)}" font-weight="${W8.label ?? 700}" fill="${col.fg}" text-anchor="middle"`);
+      + withIcon(comboIcon(c), c.draw.text, OX + x + w / 2, OY + y + h / 2, fsz, `font-size="${r1(fsz)}" font-weight="${W8.label ?? 700}" fill="${col.fg}"`, col.fg);
   }
   const stack = {};
   for (const c of idents) {
@@ -619,8 +632,8 @@ function render(data, theme, icons) {
     out += col.defs || '';
     for (const k of c.members) {
       const n = (stack[k.id] = (stack[k.id] || 0) + 1) - 1;
-      const s = L.fs.label + 4, x = OX + k.x + IN + KS - s / 2, y = OY + k.y + IN + L.baseY - s / 2 + identDy(k, n, s, best.opts, L);
-      out += `<rect x="${r1(x)}" y="${r1(y)}" width="${r1(s)}" height="${r1(s)}" rx="${r1(s * COMBO_R)}" fill="${col.bg}"/>` + text(c.letter, `x="${r1(x + s / 2)}" y="${r1(y + s / 2 + L.fs.label * 0.36)}" font-size="${r1(L.fs.label)}" font-weight="${W8.label ?? 700}" fill="${col.fg}" text-anchor="middle"`);
+      const s = L.fs.label + 4, w = identWidth(c.letter, L.fs.label), x = OX + k.x + IN + KS - w / 2, y = OY + k.y + IN + L.baseY - s / 2 + identDy(k, n, s, best.opts, L);
+      out += `<rect x="${r1(x)}" y="${r1(y)}" width="${r1(w)}" height="${r1(s)}" rx="${r1(s * COMBO_R)}" fill="${col.bg}"/>` + text(c.letter, `x="${r1(x + w / 2)}" y="${r1(y + s / 2 + L.fs.label * 0.36)}" font-size="${r1(L.fs.label)}" font-weight="${W8.label ?? 700}" fill="${col.fg}" text-anchor="middle"`);
     }
   }
 
@@ -648,7 +661,7 @@ function render(data, theme, icons) {
   }
   // 注釈・Combo欄
   let foot = '';
-  if (notes.length || combos.length) {
+  if (notes.length || hasCombo) {
     foot += `<path d="M${M} ${footTop} H${W - M}" stroke="${mix(P.base, theme.ground?.to || '#ffffff', 0.15)}" stroke-width="1"/>`;
     const body = `font-size="${FOOT_FS}" font-weight="${W8.sub ?? 500}" fill="${P.base}"`;
     const lines = (ls, x, y) => ls.map((t, j) => text(t, `x="${x}" y="${y + j * FOOT_LH}" ${body}`)).join('');
@@ -662,14 +675,15 @@ function render(data, theme, icons) {
         y += n.lines.length * FOOT_LH + FOOT_GAP;
       }
     }
-    if (combos.length) {
+    if (hasCombo) {
       const cx = colX[1];
       foot += text(words.combo, `x="${cx}" y="${footTop + 32}" font-size="14" font-weight="${W8.op ?? 700}" fill="${P.base}"`);
       let y = footTop + 58;
+      if (commonLines.length) { foot += lines(commonLines, cx, y); y += commonLines.length * FOOT_LH + FOOT_GAP; }
       for (const it of combos) {
         const col = comboColor(it.c), w = headW(it.head), top = y - 10.5;
         foot += (col.defs || '') + `<rect x="${r1(cx)}" y="${r1(top)}" width="${r1(w)}" height="${HEAD_H}" rx="${r1(HEAD_H * COMBO_R)}" fill="${col.bg}"/>`
-          + text(it.head.text, `x="${r1(cx + w / 2)}" y="${r1(top + HEAD_H / 2 + HEAD_FS * 0.36)}" font-size="${HEAD_FS}" font-weight="${W8.label ?? 700}" fill="${col.fg}" text-anchor="middle"`)
+          + withIcon(it.head.icon, it.head.text, cx + w / 2, top + HEAD_H / 2, HEAD_FS, `font-size="${HEAD_FS}" font-weight="${W8.label ?? 700}" fill="${col.fg}"`, col.fg)
           + lines(it.lines, r1(cx + w + HEAD_GAP), y);
         y += it.lines.length * FOOT_LH + FOOT_GAP;
       }
@@ -693,5 +707,10 @@ if (args.help || !args.data) {
 const data = loadJSON(args.data, '中間データ');
 validate(data);
 for (const k of data.keys) if (k.base && typeof k.base === 'object') { k.baseIcon = k.base.icon; k.base = k.base.text; }
+// 基本入力と同じ出力のセルは、&trans と同じく描かない（第9.1節）
+for (const k of data.keys) for (const [id, v] of Object.entries(k.cells || {})) {
+  const c = cellOf(v);
+  if (k.base && c.text === k.base && (c.icon ?? null) === (k.baseIcon ?? null) && !c.hold) { delete k.cells[id]; console.error(`警告: ${k.id} の ${id} セル「${c.text}」は基本入力と同じ出力なので描きません。中間データから外してください（第9.1節）`); }
+}
 const svg = render(compressSplit(data), loadTheme(args.theme), loadIcons());
 if (args.out) fs.writeFileSync(args.out, svg); else process.stdout.write(svg);

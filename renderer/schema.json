@@ -107,14 +107,11 @@
             }
           },
           "switch": {
-            "type": "object",
-            "description": "レイヤー切り替え（第4.3節）",
-            "required": ["layer", "via"],
-            "additionalProperties": false,
-            "properties": {
-              "layer": { "type": "string", "description": "切り替え先レイヤーの id" },
-              "via": { "type": "string", "enum": ["hold", "tap-2", "tap-3", "toggle", "to", "one-shot"], "description": "切り替える操作" }
-            }
+            "description": "レイヤー切り替え（第4.3節）。1つのキーに複数ある場合（長押しで A、2回タップで B など）は配列にし、下部に縦に並べる",
+            "oneOf": [
+              { "$ref": "#/$defs/switch" },
+              { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/switch" } }
+            ]
           },
           "note": { "type": "string", "description": "そのキーの注釈の本文（第8章）。番号とマーカーは描画プログラムが付ける" }
         }
@@ -136,17 +133,33 @@
             "enum": ["base", "layer", "go"],
             "description": "base：レイヤーに関係なく有効／layer：そのレイヤーにいる間だけ有効／go：そのレイヤーへ行く（第3.1節）"
           },
-          "layer": { "oneOf": [{ "type": "string" }, { "type": "array", "minItems": 2, "items": { "type": "string" } }], "description": "kind が layer・go のときのレイヤーの id。layer で複数の追加レイヤーで有効な場合は配列にする（go は1つだけ）" }
+          "layer": { "oneOf": [{ "type": "string" }, { "type": "array", "minItems": 2, "items": { "type": "string" } }], "description": "kind が layer・go のときのレイヤーの id。layer で複数の追加レイヤーで有効な場合は配列にする（go は1つだけ）" },
+          "via": { "type": "string", "enum": ["hold", "toggle", "to", "one-shot"], "description": "kind が go のときの切り替える操作（第6章）。省略時は hold。hold 以外はラベルに操作記号を付ける" }
         },
         "allOf": [
           { "if": { "properties": { "kind": { "enum": ["layer", "go"] } } }, "then": { "required": ["layer"] } }
         ]
       }
     },
+    "comboNote": {
+      "type": "string",
+      "description": "多くのComboに共通の有効条件など（第10.7節）。Combo欄の先頭に1回だけ載せる。ここに書いた内容は、個々のComboの note から省く"
+    },
     "notes": {
       "type": "array",
       "description": "キーに属さない注釈の本文（第8.2節）。1項目に1つの内容を1文で書く。番号なしで注釈欄の末尾に載せる。キーの注釈は keys[].note に書く",
       "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "switch": {
+      "type": "object",
+      "required": ["layer", "via"],
+      "additionalProperties": false,
+      "properties": {
+        "layer": { "type": "string", "description": "切り替え先レイヤーの id" },
+        "via": { "type": "string", "enum": ["hold", "tap-2", "tap-3", "toggle", "to", "one-shot"], "description": "切り替える操作" }
+      }
     }
   }
 }
