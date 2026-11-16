@@ -262,6 +262,8 @@ function isVerticalPair(a, b) {
 // Comboの識別子。英大文字で、26個を超えたら27個目から AA、AB…の2文字にする（第6.2節）
 const identLetter = (i) => (i < 26 ? String.fromCharCode(65 + i) : identLetter(Math.floor(i / 26) - 1) + String.fromCharCode(65 + (i % 26)));
 // 識別子の幅。1文字は高さと同じ幅、2文字は文字に合わせて横に広げる
+// 識別子の左端。右端を、右隣のキーとの隙間の中央（キーの位置から1u）に揃える（第6.2節）
+const identX = (k, w) => k.x + PITCH - w;
 const identWidth = (t, fsz) => Math.max(fsz + 4, [...t].length > 1 ? textWidth(t, fsz) + fsz * 0.6 : 0);
 const labelWidth = (t, fsz, icon = false) => Math.max(textWidth(t, fsz) + fsz * LABEL_PAD + (icon ? fsz * (ONE_SHOT.size + ONE_SHOT.gap) : 0), fsz * LABEL_MIN_W);
 // レイヤー切り替えのComboで、長押し以外の操作で切り替えるものは、ラベルに操作記号を付ける（第6章）
@@ -378,7 +380,7 @@ function placeCombos(data, L, iconSize, opts = {}) {
   const cnt = {};
   for (const c of idents) for (const k of c.members) {
     const n = (cnt[k.id] = (cnt[k.id] || 0) + 1) - 1, sz = L.fs.label + 4, w = identWidth((data.combos || []).length > 26 ? 'AA' : 'A', L.fs.label);
-    identRects.push([k.x + IN + KS - w / 2, k.y + IN + L.baseY - sz / 2 + identDy(k, n, sz, opts, L), w, sz]);
+    identRects.push([identX(k, w), k.y + IN + L.baseY - sz / 2 + identDy(k, n, sz, opts, L), w, sz]);
   }
   // 配置済みのComboラベルも避ける（第6.1節）
   const placedRects = [];
@@ -633,7 +635,7 @@ function render(data, theme, icons, best, i) {
     out += col.defs || '';
     for (const k of c.members) {
       const n = (stack[k.id] = (stack[k.id] || 0) + 1) - 1;
-      const s = L.fs.label + 4, w = identWidth(c.letter, L.fs.label), x = OX + k.x + IN + KS - w / 2, y = OY + k.y + IN + L.baseY - s / 2 + identDy(k, n, s, best.opts, L);
+      const s = L.fs.label + 4, w = identWidth(c.letter, L.fs.label), x = OX + identX(k, w), y = OY + k.y + IN + L.baseY - s / 2 + identDy(k, n, s, best.opts, L);
       out += `<rect x="${r1(x)}" y="${r1(y)}" width="${r1(w)}" height="${r1(s)}" rx="${r1(s * COMBO_R)}" fill="${col.bg}"/>` + text(c.letter, `x="${r1(x + w / 2)}" y="${r1(y + s / 2 + L.fs.label * 0.36)}" font-size="${r1(L.fs.label)}" font-weight="${W8.label ?? 700}" fill="${col.fg}" text-anchor="middle"`);
     }
   }
