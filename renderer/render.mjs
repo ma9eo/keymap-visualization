@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// キーマップ可視化 デザインルール v0.4 の参照実装
+// キーマップ可視化 デザインルール v0.5 の参照実装
 // 中間データ（JSON）とテーマ（JSON）から SVG を描く。外部ライブラリは使わない。
 //
 //   node renderer/render.mjs <中間データ.json> [--theme <名前|パス>] [-o <出力.svg>]
@@ -901,7 +901,7 @@ function render(data, theme, icons, best, i) {
   const title = m.title || `${m.keyboard}${sep}${words.keymap} — ${m.os}`;
   // 見出しと出典の行は、キャンバスの幅（左右の余白の内側）に収まらなければ、収まるまで文字を縮める（第10.7節）
   const fitSize = (t, fs, weight) => r1(fs * Math.min(1, (W - M * 2) / proseWidth(t, fs, weight)));
-  const sourceLine = `${words.source}：${m.source.repo} @ ${m.source.commit}${m.source.path ? `（${m.source.path}）` : ''}　${words.spec}：${m.spec || 'キーマップ可視化 デザインルール v0.4'}`;
+  const sourceLine = `${words.source}：${m.source.repo} @ ${m.source.commit}${m.source.path ? `（${m.source.path}）` : ''}　${words.spec}：${m.spec || 'キーマップ可視化 デザインルール v0.5'}`;
   let head = text(title, `x="${M}" y="74" font-size="${fitSize(title, 30, W8.base ?? 700)}" font-weight="${W8.base ?? 700}" fill="${P.base}"`)
     + text(sourceLine, `x="${M}" y="104" font-size="${fitSize(sourceLine, 12.5, W8.sub ?? 500)}" font-weight="${W8.sub ?? 500}" fill="${P.sub}"`);
   let lx = M;
