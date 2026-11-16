@@ -51,6 +51,18 @@ const textWidth = (s, fs) => [...s].reduce((w, ch) => w + (cjk(ch) ? fs : fs * 0
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const text = (s, attrs) => `<text ${attrs}>${esc(s)}</text>`;
 const r1 = (v) => Math.round(v * 100) / 100;
+// 幅 max に収まるよう折り返す。英数字の連なりは途中で切らず（1行に収まらないものだけ1文字ずつ切る）、句読点や閉じ括弧は行頭に置かない
+function wrap(s, max, fs) {
+  const tokens = (s.match(/[\x21-\x7e]+ *| +|./gu) || []).flatMap((t) => (textWidth(t.trimEnd(), fs) > max ? [...t] : [t]));
+  const lines = [];
+  let cur = '';
+  for (const t of tokens) {
+    if (cur && textWidth(cur + t.trimEnd(), fs) > max && !/^[、。，．・：；！？）」』】〕,.:;!?)\]]/u.test(t)) { lines.push(cur.trimEnd()); cur = t.trimStart(); }
+    else cur += t;
+  }
+  if (cur.trim()) lines.push(cur.trimEnd());
+  return lines.length ? lines : [''];
+}
 
 // ---------------------------------------------------------------- 入力
 // 記号1文字だけの短縮表記は、キーの出力と取り違えるので使わない（第10.4節）
@@ -214,6 +226,14 @@ function palette(t, data) {
 }
 
 // ---------------------------------------------------------------- Combo（第6章）
+// 注釈マーカーが付きうるキー。セルの短縮表記を使う可能性があるキーにも付く（第8.2節）
+const hasMark = (k, opts = {}) => !!(k.note || (opts.short && Object.values(k.cells || {}).some((v) => v?.short)));
+// 1キーに複数ある識別子の縦のずれ（第6.4節）。基本入力の高さから下へ積み、キーの下端（マーカーがあればその上端）を越える分は上へ積む
+const identDy = (k, n, s, opts, L) => {
+  const limit = hasMark(k, opts) ? KS - markInset(L) - 1 : KS;
+  const down = Math.max(0, Math.floor((limit - (L.baseY + s / 2)) / (s + 2)));
+  return (n <= down ? n : -(n - down)) * (s + 2);
+};
 const keyBox = (k) => [k.x + IN, k.y + IN, KS, KS];
 function isHorizontalPair(a, b) {
   if (a.rot || b.rot) return false;
@@ -226,8 +246,7 @@ function isHorizontalPair(a, b) {
 function obstacles(k, L, iconSize, opts = {}) {
   const [x0, y0] = keyBox(k);
   const o = [];
-  const bfs = baseSize(k, L);
-  const bw = textWidth(k.base || '', bfs) + (k.baseIcon ? bfs * ONE_SHOT.size + bfs * ONE_SHOT.gap : 0);
+  const bfs = baseSize(k, L), bw = baseWidth(k, bfs);
   if (k.base) o.push([x0 + KS / 2 - bw / 2, y0 + L.baseY - bfs * 0.42, bw, bfs * 0.84]);
   Object.keys(k.cells || {}).forEach((id) => { const c = cellRect(L, k._layerIndex[id]); o.push([x0 + c[0], y0 + c[1], c[2], c[3]]); });
   opRows(k).forEach((op, i) => {
@@ -235,13 +254,13 @@ function obstacles(k, L, iconSize, opts = {}) {
     if (op.kind === 'switch') o.push([x0 + PAD, y0 + y - L.barH / 2, KS - PAD * 2, L.barH]);
     else { const w = textWidth(op.text, L.fs.op) + (op.icon ? iconSize + 2.5 : 0); o.push([x0 + KS / 2 - w / 2, y0 + y - L.fs.op * 0.6, w, L.fs.op * 1.2]); }
   });
-  // 注釈マーカー。セルの短縮表記を使う可能性があるキーにも付く（第8.2節）
-  if (k.note || (opts.short && Object.values(k.cells || {}).some((v) => v?.short))) { const [mx, my] = markPos(k, L); o.push([mx - 1, my - 1, L.mark + 2, L.mark + 2]); }
+  if (hasMark(k, opts)) { const [mx, my] = markPos(k, L); o.push([mx - 1, my - 1, L.mark + 2, L.mark + 2]); }
   return o;
 }
 // 注釈マーカーは、中心をキーの右下の角の縁（角丸なら丸みの縁）に合わせて置く（第8.1節）。外へのはみ出しはキー間隔までにする
+const markInset = (L) => Math.max(L.mark / 2 + L.radius * (1 - Math.SQRT1_2), L.mark - (PITCH - KS));
 function markPos(k, L) {
-  const gap = PITCH - KS, inside = Math.max(L.mark / 2 + L.radius * (1 - Math.SQRT1_2), L.mark - gap);
+  const inside = markInset(L);
   return [k.x + IN + KS - inside, k.y + IN + KS - inside];
 }
 const hit = (r, s) => r[0] < s[0] + s[2] && s[0] < r[0] + r[2] && r[1] < s[1] + s[3] && s[1] < r[1] + r[3];
@@ -261,7 +280,15 @@ function opRows(k) {
   return rows;
 }
 
-const baseSize = (k, L) => ([...(k.base || '')].length > 1 ? L.fs.base * (L.longBase ?? 0.71) : L.fs.base);
+// 基本入力の大きさ。キーの内側の幅に収まらなければ縮める（第10.4節）。下限でも収まらないものは over にして警告の対象にする
+const baseFull = (k, L) => ([...(k.base || '')].length > 1 ? L.fs.base * (L.longBase ?? 0.71) : L.fs.base);
+const baseWidth = (k, fs) => textWidth(k.base || '', fs) + (k.baseIcon ? fs * (ONE_SHOT.size + ONE_SHOT.gap) : 0);
+function baseFit(k, L) {
+  const fs = baseFull(k, L);
+  const f = [1, ...SHRINK].find((x) => baseWidth(k, fs * x) <= KS - PAD * 2);
+  return { fs: fs * (f ?? SHRINK.at(-1)), over: f === undefined };
+}
+const baseSize = (k, L) => baseFit(k, L).fs;
 
 // 試す表記：正式名（文字縮小を含む）→ 短縮表記（文字縮小を含む）（第10.4節）
 function variants(c, opts) {
@@ -318,15 +345,17 @@ function placeCombos(data, L, iconSize, opts = {}) {
   const cnt = {};
   for (const c of idents) for (const k of c.members) {
     const n = (cnt[k.id] = (cnt[k.id] || 0) + 1) - 1, sz = L.fs.label + 4;
-    identRects.push([k.x + IN + KS - sz / 2, k.y + IN + L.baseY - sz / 2 + n * (sz + 2), sz, sz]);
+    identRects.push([k.x + IN + KS - sz / 2, k.y + IN + L.baseY - sz / 2 + identDy(k, n, sz, opts, L), sz, sz]);
   }
-  const fits = (c, cand, v) => { const r = rect(c, cand, v); return [...obstacles(c.a, L, iconSize, opts), ...obstacles(c.b, L, iconSize, opts), ...identRects].every((o) => !hit(r, o)); };
+  // 配置済みのComboラベルも避ける（第6.1節）
+  const placedRects = [];
+  const fits = (c, cand, v) => { const r = rect(c, cand, v); return [...obstacles(c.a, L, iconSize, opts), ...obstacles(c.b, L, iconSize, opts), ...identRects, ...placedRects].every((o) => !hit(r, o)); };
   // 各Comboを個別に、候補位置の順に試す
   const fallback = [];
   for (const c of labels) {
     let placed = null;
     for (const v of variants(c, opts)) { const cand = cands.find((cd) => fits(c, cd, v)); if (cand) { placed = { v, cand }; break; } }
-    if (placed) { c.rect = rect(c, placed.cand, placed.v); c.cand = placed.cand.name; c.draw = placed.v; }
+    if (placed) { c.rect = rect(c, placed.cand, placed.v); c.cand = placed.cand.name; c.draw = placed.v; placedRects.push(c.rect); }
     else fallback.push(c); // どこにも置けなければ識別子方式へ（第6.1節）
   }
   for (const c of fallback) idents.push({ ...c, members: [c.a, c.b], fallback: true });
@@ -378,15 +407,19 @@ function render(data, theme, icons) {
   const W8 = theme.dims.weights || {};
   const words = WORDS[data.meta.language] || WORDS.ja;
   data.keys.forEach((k) => { k._layerIndex = Object.fromEntries(shown(data).map((l, i) => [l.id, i])); });
-  // 第10.4節の順で試す：1. 文字縮小 → 2. キー拡大 → 3. 短縮表記。Comboラベルとセルの文字を一緒に判定する
+  // 第10.4節の順で試す：1. 文字縮小 → 2. キー拡大 → 3. 短縮表記。Comboラベル・セルの文字・基本入力を一緒に判定する
   // 全て収まる最初の組み合わせを選ぶ。どれでも残る場合は、収まらない数が最も少ない最初の組み合わせを選ぶ
-  // 収まらないComboは識別子方式に、収まらないセルは下限の大きさで描いて警告する
+  // 収まらないComboは識別子方式に、収まらないセルの文字と基本入力は下限の大きさで描いて警告する
   let best = null;
   search: for (const opts of [{ shrink: true }, { shrink: true, short: true }]) {
     for (const k of ENLARGE) {
       const l = layout(theme, data, k), isz = l.fs.op * 1.2, r = placeCombos(data, l, isz, opts), cs = placeCells(data, l, opts);
-      const failed = r.failed + cs.failed;
-      if (!best || failed < best.failed) best = { l, isz, r, cs, failed };
+      // 基本入力が中央の領域（上部と下部の間）に収まり、キーの内側の幅にも収まるか
+      const bottomStart = l.opY.length ? l.opY[0] - l.lineH / 2 : KS - PAD;
+      const vfail = l.baseY - l.fs.base * 0.42 < l.topEnd || l.baseY + l.fs.base * 0.42 > bottomStart ? 1 : 0;
+      const wfail = data.keys.filter((x) => x.base && baseFit(x, l).over).length;
+      const failed = r.failed + cs.failed + vfail + wfail;
+      if (!best || failed < best.failed) best = { l, isz, r, cs, failed, opts };
       if (!failed) break search;
     }
   }
@@ -395,6 +428,7 @@ function render(data, theme, icons) {
   for (const [k, m] of cellDraw) for (const [id, c] of Object.entries(m)) {
     if (c.over) console.error(`警告: ${k.base || k.id} の ${id} セル「${c.full}」が${SHRINK.at(-1) * 100}%に縮めても収まりません。短縮表記（short）を指定してください`);
   }
+  for (const k of data.keys) if (k.base && baseFit(k, L).over) console.error(`警告: ${k.id} の基本入力「${k.base}」が${SHRINK.at(-1) * 100}%に縮めても収まりません。表記を短くしてください`);
 
   const icon = (id, x, cy, color, size = iconSize) => {
     const ic = icons[id], s = size / 24, iconSize_ = size;
@@ -420,7 +454,8 @@ function render(data, theme, icons) {
     .map((k) => {
       const parts = Object.values(cellDraw.get(k) || {}).filter((c) => c.short).map((c) => `${c.text}${words.colon}${c.full}`);
       if (k.note) parts.push(k.note);
-      return { k, text: parts.map(end).join(words.stop === '。' ? '' : ' ') };
+      // 同じキーで同じ短縮表記を複数のセルに使った場合も、正式名は1回だけ書く
+      return { k, text: [...new Set(parts.map(end))].join(words.stop === '。' ? '' : ' ') };
     })
     .filter((n) => n.text)
     .sort((p, q) => cmp(order(p.k), order(q.k)));
@@ -437,11 +472,18 @@ function render(data, theme, icons) {
     ...idents.map((c) => comboLine(c.letter, c)),
     ...labels.filter((c) => c.draw?.short || c.note || goNote(c)).map((c) => comboLine(c.draw?.short ? c.draw.text : '', c)),
   ];
-  const footLines = Math.max(notes.length, combos.length);
   const kbW = (maxX - minX) * KZ, kbH = (maxY - minY) * KZ;
   const W = Math.max(kbW + M * 2, 900);
   const footTop = HEAD + kbH + 50;
-  const H = footTop + (notes.length || combos.length ? 60 + footLines * 22 : 0) + 40;
+  // 注釈欄とCombo欄は、欄の幅で折り返す。行が増えた分はキャンバスを縦に延ばす（第8.3節）
+  const FOOT_FS = 12.5, FOOT_LH = 18, FOOT_GAP = 4, MARK_W = 22, FOOT_COL_GAP = 40;
+  const colX = [M, notes.length ? Math.max(M + 520, W / 2) : M];
+  const noteW = (combos.length ? colX[1] - FOOT_COL_GAP : W - M) - (M + MARK_W), comboW = W - M - colX[1];
+  notes.forEach((n) => { n.lines = wrap(n.text, noteW, FOOT_FS); });
+  const comboItems = combos.map((t) => wrap(t, comboW, FOOT_FS));
+  const colH = (items) => items.reduce((h, ls) => h + ls.length * FOOT_LH + FOOT_GAP, 0);
+  const footH = Math.max(colH(notes.map((n) => n.lines)), colH(comboItems));
+  const H = footTop + (notes.length || combos.length ? 60 + footH : 0) + 40;
 
   let out = '';
   // キー
@@ -497,7 +539,7 @@ function render(data, theme, icons) {
     out += col.defs || '';
     for (const k of c.members) {
       const n = (stack[k.id] = (stack[k.id] || 0) + 1) - 1;
-      const s = L.fs.label + 4, x = OX + k.x + IN + KS - s / 2, y = OY + k.y + IN + L.baseY - s / 2 + n * (s + 2);
+      const s = L.fs.label + 4, x = OX + k.x + IN + KS - s / 2, y = OY + k.y + IN + L.baseY - s / 2 + identDy(k, n, s, best.opts, L);
       out += `<rect x="${r1(x)}" y="${r1(y)}" width="${r1(s)}" height="${r1(s)}" rx="${r1(s * 0.3)}" fill="${col.bg}"/>` + text(c.letter, `x="${r1(x + s / 2)}" y="${r1(y + s / 2 + L.fs.label * 0.36)}" font-size="${r1(L.fs.label)}" font-weight="${W8.label ?? 700}" fill="${col.fg}" text-anchor="middle"`);
     }
   }
@@ -525,23 +567,25 @@ function render(data, theme, icons) {
   let foot = '';
   if (notes.length || combos.length) {
     foot += `<path d="M${M} ${footTop} H${W - M}" stroke="${mix(P.base, theme.ground?.to || '#ffffff', 0.15)}" stroke-width="1"/>`;
-    const colX = [M, notes.length ? Math.max(M + 520, W / 2) : M];
-    const body = `font-size="12.5" font-weight="${W8.sub ?? 500}" fill="${P.base}"`;
+    const body = `font-size="${FOOT_FS}" font-weight="${W8.sub ?? 500}" fill="${P.base}"`;
+    const lines = (ls, x, y) => ls.map((t, j) => text(t, `x="${x}" y="${y + j * FOOT_LH}" ${body}`)).join('');
     if (notes.length) {
       foot += text(words.notes, `x="${colX[0]}" y="${footTop + 32}" font-size="14" font-weight="${W8.op ?? 700}" fill="${P.base}"`);
-      notes.forEach((n, i) => {
-        const y = footTop + 58 + i * 22;
+      let y = footTop + 58;
+      for (const n of notes) {
         // 番号なしの注釈は、番号の代わりに白抜きのアスタリスクを付ける（第8.2節）
         foot += `<rect x="${M}" y="${y - 10.5}" width="13" height="13" rx="3" fill="${P.neutral}"/>`
           + (n.n ? text(n.n, `x="${M + 6.5}" y="${y - 1}" font-size="9" font-weight="700" fill="#ffffff" text-anchor="middle"`)
             : text('＊', `x="${M + 6.5}" y="${y - 0.5}" font-size="10" font-weight="700" fill="#ffffff" text-anchor="middle"`))
-          + text(n.text, `x="${M + 22}" y="${y}" ${body}`);
-      });
+          + lines(n.lines, M + MARK_W, y);
+        y += n.lines.length * FOOT_LH + FOOT_GAP;
+      }
     }
     if (combos.length) {
       const cx = colX[1];
       foot += text(words.combo, `x="${cx}" y="${footTop + 32}" font-size="14" font-weight="${W8.op ?? 700}" fill="${P.base}"`);
-      combos.forEach((line, i) => { foot += text(line, `x="${cx}" y="${footTop + 58 + i * 22}" ${body}`); });
+      let y = footTop + 58;
+      for (const ls of comboItems) { foot += lines(ls, cx, y); y += ls.length * FOOT_LH + FOOT_GAP; }
     }
   }
 
