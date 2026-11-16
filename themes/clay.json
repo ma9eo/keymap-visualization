@@ -23,7 +23,7 @@
     "family": "'M PLUS Rounded 1c', 'Zen Maru Gothic', 'Noto Sans CJK JP', sans-serif",
     "href": "https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap"
   },
-  "text": { "base": "#33291f", "sub": "#85786a" },
+  "text": { "base": "#33291f", "sub": "#6e6255" },
   "layers": ["#1f6fd9", "#127a55", "#7b3fc4", "#c4621f", "#b8336a", "#4b5bbf"],
   "tintRatio": 0.42,
   "neutral": "#45403a",

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/ma9eo/keymap-visualization/renderer/schema.json",
   "title": "キーマップ可視化 中間データ",
-  "description": "キーマップ可視化 デザインルール v0.2 の中間データ。キーマップを解析し、入力項目を確定させた結果を表す。座標は 1u = 100 の単位で表す。",
+  "description": "キーマップ可視化 デザインルール v0.3 の中間データ。キーマップを解析し、入力項目を確定させた結果を表す。座標は 1u = 100 の単位で表す。",
   "type": "object",
   "required": ["meta", "layers", "keys"],
   "additionalProperties": false,
@@ -11,13 +11,14 @@
     "meta": {
       "type": "object",
       "description": "ヘッダ・メタ情報と、描画に使う入力項目（第10.0節・第10.7節）",
-      "required": ["keyboard", "os", "source"],
+      "required": ["keyboard", "os", "split", "source"],
       "additionalProperties": false,
       "properties": {
         "keyboard": { "type": "string", "description": "キーボード名（実機のサイズを含む）" },
+        "split": { "type": "boolean", "description": "分割型なら true、一体型なら false（第10.0節）。キーの間隔からは推定しない。true のときは、左半分と右半分が横方向に重ならず、間が1u以上空く座標で keys を書く（第10.10節）" },
         "os": { "type": "string", "description": "対象OS" },
         "language": { "type": "string", "enum": ["ja", "en"], "default": "ja", "description": "表示言語" },
-        "hostLayout": { "type": "string", "description": "ホストのキーボード配列（US・JISなど）。記号の解釈に使った値を記録する。図には表示しない" },
+        "hostLayout": { "type": "string", "description": "ホストのキーボード配列（US・JISなど）。記号の解釈に使った値を記録する。キーマップビジュアルには表示しない" },
         "source": {
           "type": "object",
           "required": ["repo", "commit"],
@@ -28,13 +29,15 @@
             "path": { "type": "string", "description": "キーマップのファイルパス" }
           }
         },
+        "osSource": { "type": "string", "description": "対象OSをキーマップの中身から推定した場合の根拠（第10.0節）。キーマップビジュアルには表示しない" },
+        "layoutSource": { "type": "string", "description": "物理配置の根拠。キーの座標を決めた資料（設計データ・配列定義・写真）と決め方を書く（第9.0節）。キーマップビジュアルには表示しない" },
         "spec": { "type": "string", "description": "本仕様のバージョン" },
         "title": { "type": "string", "description": "見出し。省略時は「キーボード名 キーマップ — OS」" }
       }
     },
     "layers": {
       "type": "array",
-      "description": "追加レイヤー。並び順が表示スロットの順（第3.2節）。図を分ける場合は、すべての図に全レイヤーを同じ順で書き、この図に表示しないレイヤーには show: false を付ける。表示するレイヤーは6つまで",
+      "description": "追加レイヤー。並び順が凡例の順で、表示スロットの割り当てにも使う（第3.2節）。キーマップビジュアルを分ける場合は、すべてのキーマップビジュアルに全レイヤーを同じ順で書き、このキーマップビジュアルに表示しないレイヤーには show: false を付ける。表示するレイヤーは6つまで",
       "items": {
         "type": "object",
         "required": ["id", "name"],
@@ -43,13 +46,13 @@
           "id": { "type": "string", "description": "データ内で参照するための識別子" },
           "name": { "type": "string", "description": "表示名（第3.1節）" },
           "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$", "description": "レイヤー色。省略時はテーマのレイヤー色を順に使う" },
-          "show": { "type": "boolean", "default": true, "description": "false にすると、この図ではセルを持たず、凡例にも載せない。レイヤー切り替えやComboの色と名前には使う（第3.2節）" }
+          "show": { "type": "boolean", "default": true, "description": "false にすると、このキーマップビジュアルではセルを持たず、凡例にも載せない。レイヤー切り替えやComboの色と名前には使う（第3.2節）" }
         }
       }
     },
     "keys": {
       "type": "array",
-      "description": "描画するキー。割り当てのないキーと表示しないキーは含めない（第9.0.1節）",
+      "description": "描画するキー。使っていないキーは id・x・y だけを書き、薄い枠で描く。表示しないキーは含めない（第9.0.1節）",
       "minItems": 1,
       "items": {
         "type": "object",
@@ -71,7 +74,7 @@
           },
           "cells": {
             "type": "object",
-            "description": "追加レイヤーの出力。キーはレイヤーの id。長い名前には短縮表記を、ワンショット修飾キーにはアイコンを添えられる",
+            "description": "追加レイヤーの出力。キーはレイヤーの id。長い名前には短縮表記を、ワンショット修飾キーにはアイコンを、そのレイヤーでの Hold には機能名を添えられる",
             "additionalProperties": {
               "oneOf": [
                 { "type": "string" },
@@ -82,7 +85,8 @@
                   "properties": {
                     "text": { "type": "string", "description": "正式名" },
                     "icon": { "const": "one-shot", "description": "ワンショット修飾キー（第4.7節）" },
-                    "short": { "type": "string", "description": "短縮表記。セルに収まらないときに描画プログラムが使い、正式名をそのキーの注釈に載せる（第10.4節）。記号1文字だけにはしない" }
+                    "short": { "type": "string", "description": "短縮表記。セルに収まらないときに描画プログラムが使い、正式名を短縮表記の一覧に載せる（第10.4節）。記号1文字だけにはしない" },
+                    "hold": { "type": "string", "description": "このレイヤーでの Hold の機能名（第4.5節）。下部に、このレイヤーの淡い色の帯で描く。Base と同じ Hold は書かない" }
                   }
                 }
               ]
@@ -103,16 +107,13 @@
             }
           },
           "switch": {
-            "type": "object",
-            "description": "レイヤー切り替え（第4.3節）",
-            "required": ["layer", "via"],
-            "additionalProperties": false,
-            "properties": {
-              "layer": { "type": "string", "description": "切り替え先レイヤーの id" },
-              "via": { "type": "string", "enum": ["hold", "tap-2", "tap-3", "toggle", "to", "one-shot"], "description": "切り替える操作" }
-            }
+            "description": "レイヤー切り替え（第4.3節）。1つのキーに複数ある場合（長押しで A、2回タップで B など）は配列にし、下部に縦に並べる",
+            "oneOf": [
+              { "$ref": "#/$defs/switch" },
+              { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/switch" } }
+            ]
           },
-          "note": { "type": "string", "description": "そのキーの注釈の本文（第8章）。番号とマーカーは描画プログラムが付ける" }
+          "note": { "type": "string", "description": "そのキーの注釈の本文（第8章）。番号とマーカーは描画プログラムが付ける。レイヤーに触れるときは [[id]]（行く）・[[id:in]]（いる間）と書く" }
         }
       }
     },
@@ -126,23 +127,39 @@
           "keys": { "type": "array", "minItems": 2, "items": { "type": "string" }, "description": "構成キーの id" },
           "text": { "type": "string", "description": "機能名。レイヤー切り替え（go）では切り替え先レイヤーの名前か、切り替える目的" },
           "short": { "type": "string", "description": "短縮表記。ラベルが収まらないときに描画プログラムが使い、正式名をCombo欄に載せる（第6.1節・第10.4節）。記号1文字だけにはしない" },
-          "note": { "type": "string", "description": "Comboの補足（有効条件など）。Combo欄に載せる（第6章）" },
+          "note": { "type": "string", "description": "Comboの補足（有効条件など）。Combo欄に載せる（第6章）。レイヤーに触れるときは [[id]]（行く）・[[id:in]]（いる間）と書く" },
           "kind": {
             "type": "string",
             "enum": ["base", "layer", "go"],
             "description": "base：レイヤーに関係なく有効／layer：そのレイヤーにいる間だけ有効／go：そのレイヤーへ行く（第3.1節）"
           },
-          "layer": { "oneOf": [{ "type": "string" }, { "type": "array", "minItems": 2, "items": { "type": "string" } }], "description": "kind が layer・go のときのレイヤーの id。layer で複数の追加レイヤーで有効な場合は配列にする（go は1つだけ）" }
+          "layer": { "oneOf": [{ "type": "string" }, { "type": "array", "minItems": 2, "items": { "type": "string" } }], "description": "kind が layer・go のときのレイヤーの id。layer で複数の追加レイヤーで有効な場合は配列にする（go は1つだけ）" },
+          "via": { "type": "string", "enum": ["hold", "toggle", "to", "one-shot"], "description": "kind が go のときの切り替える操作（第6章）。省略時は hold。hold 以外はラベルに操作アイコンを付ける" }
         },
         "allOf": [
           { "if": { "properties": { "kind": { "enum": ["layer", "go"] } } }, "then": { "required": ["layer"] } }
         ]
       }
     },
+    "comboNote": {
+      "type": "string",
+      "description": "多くのComboに共通の有効条件など（第10.7節）。Combo欄の先頭に1回だけ載せる。ここに書いた内容は、個々のComboの note から省く。レイヤーに触れるときは [[id]]（行く）・[[id:in]]（いる間）と書く"
+    },
     "notes": {
       "type": "array",
-      "description": "キーに属さない注釈の本文（第8.2節）。1項目に1つの内容を1文で書く。番号なしで注釈欄の末尾に載せる。キーの注釈は keys[].note に書く",
+      "description": "キーに属さない注釈の本文（第8.2節）。1項目に1つの内容を1文で書く。番号なしで注釈欄の末尾に載せる。キーの注釈は keys[].note に書く。レイヤーに触れるときは [[id]]（行く）・[[id:in]]（いる間）と書く",
       "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "switch": {
+      "type": "object",
+      "required": ["layer", "via"],
+      "additionalProperties": false,
+      "properties": {
+        "layer": { "type": "string", "description": "切り替え先レイヤーの id" },
+        "via": { "type": "string", "enum": ["hold", "tap-2", "tap-3", "toggle", "to", "one-shot"], "description": "切り替える操作" }
+      }
     }
   }
 }
