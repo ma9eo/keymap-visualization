@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="110 0 680 300" width="680" height="300" font-family="'M PLUS Rounded 1c','Zen Maru Gothic','Noto Sans CJK JP',sans-serif" role="img" aria-label="キーの表記。キーの中は上・中央・下の3つのゾーンに分かれ、上がレイヤーの出力、中央が基本入力、下がホールド操作。濃い色はレイヤーキー。アイコンは操作の種類。2キーの境目のラベルはCombo">
+<style>@import url("https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&amp;display=swap");</style>
+<defs>
+  <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f3ece3"/><stop offset="1" stop-color="#ebe2d7"/></linearGradient>
+  <linearGradient id="body" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f6efe6"/><stop offset="1" stop-color="#e2d5c6"/></linearGradient>
+  <linearGradient id="face" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fdf9f4"/><stop offset=".5" stop-color="#f8f2ea"/><stop offset="1" stop-color="#f0e7dc"/></linearGradient>
+  <linearGradient id="rimHi" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity=".95"/><stop offset=".45" stop-color="#ffffff" stop-opacity="0"/></linearGradient>
+  <linearGradient id="rimLo" x1="0" y1="0" x2="1" y2="1"><stop offset=".55" stop-color="#b9a48d" stop-opacity="0"/><stop offset="1" stop-color="#b9a48d" stop-opacity=".55"/></linearGradient>
+  <filter id="sh" x="-25%" y="-25%" width="150%" height="160%"><feDropShadow dx="0" dy="3.5" stdDeviation="2.8" flood-color="#6e5640" flood-opacity=".22"/><feDropShadow dx="0" dy="11" stdDeviation="11" flood-color="#6e5640" flood-opacity=".16"/></filter>
+  <g id="key">
+    <rect width="200" height="200" rx="30" fill="url(#body)"/>
+    <rect x="1.3" y="1.3" width="197.4" height="197.4" rx="28.7" fill="none" stroke="url(#rimLo)" stroke-width="2.6"/>
+    <rect x="8.7" y="7" width="182.6" height="181.3" rx="22.4" fill="url(#face)"/>
+    <rect x="8.7" y="7" width="182.6" height="181.3" rx="22.4" fill="none" stroke="url(#rimHi)" stroke-width="3"/>
+  </g>
+</defs>
+<rect x="110" width="680" height="300" fill="url(#ground)"/>
+<g transform="translate(0,-44)">
+
+<!-- 左のキー：上に追加レイヤーのセル、中央に基本入力、下に長押し -->
+<g transform="translate(300,80)">
+  <use href="#key" filter="url(#sh)"/>
+  <rect x="13" y="13" width="83.5" height="36" rx="10.8" fill="#9dbbe3"/><text x="54.75" y="40" font-size="26" font-weight="800" fill="#14488d" text-anchor="middle">←</text>
+  <rect x="103.5" y="13" width="83.5" height="36" rx="10.8" fill="#97c0ab"/><text x="145.25" y="40" font-size="26" font-weight="800" fill="#0c4f37" text-anchor="middle">F1</text>
+  <rect x="13" y="56" width="174" height="36" rx="10.8" fill="#c4a7da"/><text x="100" y="83" font-size="26" font-weight="800" fill="#562c89" text-anchor="middle">1</text>
+  <text x="100" y="139" font-size="46" font-weight="800" fill="#33291f" text-anchor="middle">A</text>
+  <!-- 2回タップのアイコンと機能名（キーの上と同じ並び） -->
+  <svg x="45" y="156" width="30" height="30" viewBox="0 0 24 24"><circle cx="8.315" cy="12" r="3.35" fill="#776d64"/><circle cx="15.685" cy="12" r="3.35" fill="#776d64"/></svg>
+  <text x="77.5" y="179" font-size="25" font-weight="700" fill="#776d64">Shift</text>
+</g>
+<!-- 右のキー：長押しでレイヤーへ入る帯 -->
+<g transform="translate(516,80)">
+  <use href="#key" filter="url(#sh)"/>
+  <rect x="13" y="13" width="83.5" height="36" rx="10.8" fill="#9dbbe3"/><text x="54.75" y="40" font-size="26" font-weight="800" fill="#14488d" text-anchor="middle">→</text>
+  <text x="100" y="139" font-size="46" font-weight="800" fill="#33291f" text-anchor="middle">S</text>
+  <rect x="13" y="154" width="174" height="32" rx="9.6" fill="#127a55"/><text x="100" y="179" font-size="25" font-weight="700" fill="#ffffff" text-anchor="middle">レイヤー</text>
+</g>
+<!-- ゾーンの境目（左右のキーを通して引く） -->
+<path d="M309 172.5 H707 M309 233 H707" fill="none" stroke="#b9a48d" stroke-width="1.6" stroke-dasharray="5 4"/>
+<!-- 2キーの境目の Combo -->
+<rect x="472" y="187" width="72" height="32" rx="16" fill="#45403a"/><text x="508" y="211" font-size="22" font-weight="800" fill="#ffffff" text-anchor="middle">Esc</text>
+
+<!-- 説明 -->
+<g font-size="17" font-weight="700" fill="#33291f" stroke="#85786a" stroke-width="1.4">
+  <!-- 上・中央・下の範囲を示す括弧 -->
+  <path d="M292 84 H286 V169 H292 M292 176 H286 V229 H292 M292 237 H286 V276 H292" fill="none"/>
+  <path d="M508 221 V302" fill="none"/>
+  <path d="M650 268 V302" fill="none"/>
+  <path d="M360 268 V302" fill="none"/>
+</g>
+<g font-size="17" font-weight="700" fill="#33291f">
+  <text x="272" y="132" text-anchor="end">レイヤーの出力</text>
+  <text x="272" y="208" text-anchor="end">基本入力</text>
+  <text x="272" y="262" text-anchor="end">ホールド操作</text>
+  <text x="508" y="322" text-anchor="middle">Combo</text>
+  <text x="650" y="322" text-anchor="middle">濃い色はレイヤーキー</text>
+  <text x="360" y="322" text-anchor="middle">アイコンは操作の種類</text>
+</g>
+</g>
+</svg>
