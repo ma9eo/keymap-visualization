@@ -60,10 +60,13 @@ const r1 = (v) => Math.round(v * 100) / 100;
 // 文章中のレイヤー（第8.2節・第10.10節）：[[id]] はそのレイヤーへ行く（濃い色のラベルで描く）、[[id:in]] はそのレイヤーにいる間（レイヤー名の文字のまま描く）
 const LAYER_REF = /\[\[([^\]:]+)(?::(in))?\]\]/g;
 const layerRefs = (t) => [...String(t ?? '').matchAll(LAYER_REF)];
+// 描画プログラムが文章に入れる部品：{{k:キー名}} はキーの形の枠、{{b:文字}} は太字（Combo欄で使う）
+const INLINE = /\[\[([^\]:]+)(?::(in))?\]\]|\{\{(k|b):([^}]*)\}\}/g;
+const inlines = (t) => [...String(t ?? '').matchAll(INLINE)];
 // 幅 max に収まるよう折り返す。英数字の連なりは途中で切らず（1行に収まらないものだけ1文字ずつ切る）、句読点や閉じ括弧は行頭に置かない
 // レイヤーの印（[[id]]・[[id:in]]）は途中で切らない。幅は measure で測る（印はラベルの幅になる）
 function wrap(s, max, fs, measure = textWidth) {
-  const tokens = (s.match(/\[\[[^\]]+\]\]|(?:(?!\[\[)[\x21-\x7e])+ *| +|./gu) || []).flatMap((t) => (!t.startsWith('[[') && measure(t.trimEnd(), fs) > max ? [...t] : [t]));
+  const tokens = (s.match(/\[\[[^\]]+\]\]|\{\{[^}]*\}\}|(?:(?!\[\[|\{\{)[\x21-\x7e])+ *| +|./gu) || []).flatMap((t) => (!/^(\[\[|\{\{)/.test(t) && measure(t.trimEnd(), fs) > max ? [...t] : [t]));
   const lines = [];
   let cur = '';
   for (const t of tokens) {
@@ -243,7 +246,8 @@ function palette(t, data) {
 
 // ---------------------------------------------------------------- Combo（第6章）
 // 注釈マーカーが付きうるキー。セルの短縮表記を使う可能性があるキーにも付く（第8.2節）
-const hasMark = (k, opts = {}) => !!(k.note || (opts.short && Object.values(k.cells || {}).some((v) => v?.short)));
+// 注釈マーカーが付くキー。短縮表記の正式名は注釈ではなく短縮表記の一覧に載せるので、マーカーは付かない（第8.2節）
+const hasMark = (k) => !!k.note;
 // 1キーに複数ある識別子の縦のずれ（第6.4節）。基本入力の高さから下へ積み、キーの下端（マーカーがあればその上端）を越える分は上へ積む
 const identDy = (k, n, s, opts, L) => {
   const limit = hasMark(k, opts) ? KS - markInset(L) - 1 : KS;
@@ -536,40 +540,50 @@ function render(data, theme, icons, best, i) {
   const maxX = Math.max(...data.keys.map((k) => k.x + PITCH)), maxY = Math.max(...data.keys.map((k) => k.y + PITCH + (k.rot ? 20 : 0)));
   const M = 70, HEAD = 190, KZ = L.k;
   const OX = -minX, OY = -minY;
-  // 注釈（第8章）：キーの注釈と、短縮表記を使ったセルの正式名を1つの番号にまとめる。キーに属さない注釈は番号なしで末尾に置く
+  // 注釈（第8章）：キーの注釈を採番する。まったく同じ本文の注釈は1つの番号にまとめ、該当するすべてのキーに同じ番号を付ける
+  // キーに属さない注釈は番号なしで末尾に置く
   const { order, cmp } = keyOrder();
   const end = (t) => (/[。.．!?！？]$/.test(t) ? t : t + words.stop.trim());
-  const notes = data.keys
-    .map((k) => {
-      const parts = Object.values(cellDraw.get(k) || {}).filter((c) => c.short).map((c) => `${c.text}${words.colon}${c.full}`);
-      if (k.note) parts.push(k.note);
-      // 同じキーで同じ短縮表記を複数のセルに使った場合も、正式名は1回だけ書く
-      return { k, text: [...new Set(parts.map(end))].join(words.stop === '。' ? '' : ' ') };
-    })
-    .filter((n) => n.text)
-    .sort((p, q) => cmp(order(p.k), order(q.k)));
-  notes.forEach((n, i) => { n.n = i + 1; n.k._noteNo = n.n; });
+  const sorted = data.keys.slice().sort((p, q) => cmp(order(p), order(q)));
+  const notes = [], byText = new Map();
+  for (const k of sorted.filter((x) => x.note)) {
+    const t = end(k.note);
+    if (!byText.has(t)) { byText.set(t, { text: t, n: notes.length + 1 }); notes.push(byText.get(t)); }
+    k._noteNo = byText.get(t).n;
+  }
   notes.push(...(data.notes || []).map((t) => ({ text: t })));
+  // 短縮表記の一覧（第8.2節）：セルで使った短縮表記と正式名を、キーの採番順に1回ずつ載せる。キーにマーカーは付けない
+  const abbr = [], seenAbbr = new Set();
+  for (const k of sorted) for (const c of Object.values(cellDraw.get(k) || {})) {
+    const key = c.text + '\u0000' + c.full;
+    if (c.short && !seenAbbr.has(key)) { seenAbbr.add(key); abbr.push(`{{b:${c.text}}}${words.colon}${c.full}`); }
+  }
   // Combo欄（第6章）：識別子の対応表、短縮表記の正式名、Comboの補足
   const K = Object.fromEntries(data.keys.map((k) => [k.id, k]));
-  const keysOf = (c) => c.keys.map((id) => K[id]?.base || id).join(words.and);
+  const keysOf = (c) => c.keys.map((id) => `{{k:${K[id]?.base || id}}}`).join('');
   // 目的で表したレイヤー切り替えのComboは、切り替え先をCombo欄に書く（第6章）
   const layerName = Object.fromEntries(data.layers.map((l) => [l.id, l.name]));
   const goNote = (c) => (c.letter && comboIcon(c) ? words.viaGo[c.via](c.layer) : c.kind === 'go' && c.text !== layerName[c.layer] ? words.goTo(c.layer) : '');
-  const comboLine = (c) => `${keysOf(c)}${words.dash}${[c.text, goNote(c), c.note].filter(Boolean).map((t, i, a) => (a.length > 1 ? end(t) : t)).join(words.stop === '。' ? '' : ' ')}`;
+  const comboSep = words.stop === '。' ? '　' : '  ';
+  const comboLine = (c, head) => {
+    const out = head?.kind === 'label' && head.text === c.text ? '' : `{{b:${c.text}}}`;
+    const rest = [goNote(c), c.note].filter(Boolean).map(end).join(words.stop === '。' ? '' : ' ');
+    return [keysOf(c), out, rest].filter(Boolean).join(comboSep);
+  };
   // Combo欄の各行の頭には、キーマップ上と同じ見た目のマーク（識別子、またはラベル）を付ける
   const HEAD_FS = 9.5, HEAD_H = 13, HEAD_GAP = 9;
   const headW = (h) => (h.kind === 'ident' ? identWidth(h.text, HEAD_H - 4) : labelWidth(h.text, HEAD_FS, !!h.icon));
   const combos = [
-    ...idents.map((c) => ({ c, head: { kind: 'ident', text: c.letter }, body: comboLine(c) })),
-    ...labels.filter((c) => c.draw?.short || c.note || goNote(c)).map((c) => ({ c, head: { kind: 'label', text: c.draw.text, icon: comboIcon(c) }, body: comboLine(c) })),
+    ...idents.map((c) => ({ c, head: { kind: 'ident', text: c.letter }, body: comboLine(c, { kind: 'ident' }) })),
+    ...labels.filter((c) => c.draw?.short || c.note || goNote(c)).map((c) => ({ c, head: { kind: 'label', text: c.draw.text, icon: comboIcon(c) }, body: comboLine(c, { kind: 'label', text: c.draw.text }) })),
   ];
   const kbW = (maxX - minX) * KZ, kbH = (maxY - minY) * KZ;
   const W = Math.max(kbW + M * 2, 900);
-  const footTop = HEAD + kbH + 50;
+  const kbBottom = HEAD + kbH; // キーボード領域の下端
   // 注釈欄とCombo欄は、欄の幅で折り返す。行が増えた分はキャンバスを縦に延ばす（第8.3節）
   const FOOT_FS = 12.5, FOOT_LH = 18, FOOT_GAP = 4, MARK_W = 22, FOOT_COL_GAP = 40;
-  const colX = [M, notes.length ? Math.max(M + 520, W / 2) : M];
+  const noteCol = notes.length > 0;
+  const colX = [M, noteCol ? Math.max(M + 520, W / 2) : M];
   // 多くのComboに共通の有効条件は、Combo欄の先頭に1回だけ書く（第10.7節）
   const comboCommon = data.comboNote && data.combos?.length ? data.comboNote : '';
   const hasCombo = combos.length > 0 || !!comboCommon;
@@ -577,16 +591,34 @@ function render(data, theme, icons, best, i) {
   // 文章中のレイヤーはラベルで描く（第3.1節）。ラベルの幅も折り返しの計算に含める
   const REF_FS = 10.5, REF_PADX = 5, REF_GAP = 2, REF_H = 15;
   const refW = (id) => textWidth(P.C[id].name, REF_FS) + REF_PADX * 2 + REF_GAP * 2;
-  const richWidth = (t, fs) => { let w = 0, last = 0; for (const m of layerRefs(t)) { w += textWidth(t.slice(last, m.index), fs) + refW(m[1]); last = m.index + m[0].length; } return w + textWidth(t.slice(last), fs); };
+  const KEY_FS = 11, KEY_PADX = 4, KEY_GAP = 1.5;
+  const partW = (m, fs) => (m[1] ? refW(m[1]) : m[3] === 'k' ? textWidth(m[4], KEY_FS) + KEY_PADX * 2 + KEY_GAP * 2 : textWidth(m[4], fs));
+  const richWidth = (t, fs) => { let w = 0, last = 0; for (const m of inlines(t)) { w += textWidth(t.slice(last, m.index), fs) + partW(m, fs); last = m.index + m[0].length; } return w + textWidth(t.slice(last), fs); };
   // いる間の条件としてのレイヤー（[[id:in]]）は、ラベルにせずレイヤー名の文字に置き換える。ラベルが多いと文章が読みにくくなるため
   const plainIn = (t) => t.replace(/\[\[([^\]:]+):in\]\]/g, (_, id) => P.C[id].name);
   const commonLines = comboCommon ? wrap(plainIn(comboCommon), comboW, FOOT_FS, richWidth) : [];
   notes.forEach((n) => { n.lines = wrap(plainIn(n.text), noteW, FOOT_FS, richWidth); });
-  combos.forEach((it) => { it.lines = wrap(plainIn(it.body), comboW - headW(it.head) - HEAD_GAP, FOOT_FS, richWidth); });
+  // 本文の書き出しは、行頭のマークの最大幅にそろえる
+  const headCol = Math.max(0, ...combos.map((it) => headW(it.head)));
+  combos.forEach((it) => { it.lines = wrap(plainIn(it.body), comboW - headCol - HEAD_GAP, FOOT_FS, richWidth); });
   const comboItems = combos.map((it) => it.lines);
   const colH = (items) => items.reduce((h, ls) => h + ls.length * FOOT_LH + FOOT_GAP, 0);
+  // 短縮表記の一覧は、注釈欄とCombo欄の上に、キーマップビジュアルの横幅いっぱいで横に並べる（短縮表記は太字）
+  // 項目の途中では折り返さず、項目の切れ目で次の行に送る
+  // 短縮表記の一覧は、注釈やCombo欄より目立たないよう、見出しを付けずに小さく薄い文字で描く
+  const ABBR_FS = 11, ABBR_LH = 16;
+  const abbrSep = words.stop === '。' ? '　　' : '    ', abbrLines = [];
+  for (const t of abbr) {
+    const cur = abbrLines.at(-1);
+    if (cur !== undefined && richWidth(cur + abbrSep + t, ABBR_FS) <= W - M * 2) abbrLines[abbrLines.length - 1] = cur + abbrSep + t;
+    else abbrLines.push(t);
+  }
+  // 短縮表記の一覧はキーボードと区切り線の間に置き、区切り線から下に注釈欄とCombo欄を置く
+  // 短縮表記の一覧はキーボードのすぐ下に置き、その下の区切り線から注釈欄とCombo欄を置く
+  const abbrY = kbBottom + 34; // 短縮表記の1行目のベースライン
+  const footTop = abbrLines.length ? abbrY + (abbrLines.length - 1) * ABBR_LH + 26 : kbBottom + 50, colTop = footTop;
   const footH = Math.max(colH(notes.map((n) => n.lines)), colH(commonLines.length ? [commonLines, ...comboItems] : comboItems));
-  const H = footTop + (notes.length || hasCombo ? 60 + footH : 0) + 40;
+  const H = footTop + (noteCol || hasCombo ? 60 + footH : 0) + 40;
 
   let out = '';
   // 使っていないキー（第9.0.1節）は、実機の形を伝えるため、文字のない薄い枠として描く
@@ -682,45 +714,64 @@ function render(data, theme, icons, best, i) {
   }
   // 注釈・Combo欄
   let foot = '';
-  if (notes.length || hasCombo) {
+  if (noteCol || hasCombo || abbr.length) {
     foot += `<path d="M${M} ${footTop} H${W - M}" stroke="${mix(P.base, theme.ground?.to || '#ffffff', 0.15)}" stroke-width="1"/>`;
     const body = `font-size="${FOOT_FS}" font-weight="${W8.sub ?? 500}" fill="${P.base}"`;
     // 1行を、文字の部分とレイヤーのラベルに分けて描く。ラベルの前の文字は、見積もった幅に合わせて字間を整え、ラベルと重ならないようにする
-    const richLine = (t, x, y) => {
+    const richLine = (t, x, y, fs = FOOT_FS, color = P.base) => {
       let out = '', cx = x, last = 0;
-      const run = (u, fit) => { if (!u) return; const w = textWidth(u, FOOT_FS); out += text(u, `x="${r1(cx)}" y="${y}" xml:space="preserve"${fit ? ` textLength="${r1(w)}" lengthAdjust="spacing"` : ''} ${body}`); cx += w; };
-      for (const m of layerRefs(t)) {
+      const attrs = `font-size="${fs}" font-weight="${W8.sub ?? 500}" fill="${color}"`;
+      const run = (u, fit) => { if (!u) return; const w = textWidth(u, fs); out += text(u, `x="${r1(cx)}" y="${y}" xml:space="preserve"${fit ? ` textLength="${r1(w)}" lengthAdjust="spacing"` : ''} ${attrs}`); cx += w; };
+      for (const m of inlines(t)) {
         run(t.slice(last, m.index), true);
-        const c = P.C[m[1]], w = textWidth(c.name, REF_FS) + REF_PADX * 2;
-        out += `<rect x="${r1(cx + REF_GAP)}" y="${r1(y - 11)}" width="${r1(w)}" height="${REF_H}" rx="${r1(REF_H * 0.3)}" fill="${c.solid}"/>`
-          + text(c.name, `x="${r1(cx + REF_GAP + w / 2)}" y="${r1(y - 11 + REF_H / 2 + REF_FS * 0.36)}" font-size="${REF_FS}" font-weight="${W8.op ?? 700}" fill="#ffffff" text-anchor="middle"`);
-        cx += w + REF_GAP * 2;
+        if (m[1]) {
+          const c = P.C[m[1]], w = textWidth(c.name, REF_FS) + REF_PADX * 2;
+          out += `<rect x="${r1(cx + REF_GAP)}" y="${r1(y - 11)}" width="${r1(w)}" height="${REF_H}" rx="${r1(REF_H * 0.3)}" fill="${c.solid}"/>`
+            + text(c.name, `x="${r1(cx + REF_GAP + w / 2)}" y="${r1(y - 11 + REF_H / 2 + REF_FS * 0.36)}" font-size="${REF_FS}" font-weight="${W8.op ?? 700}" fill="#ffffff" text-anchor="middle"`);
+          cx += w + REF_GAP * 2;
+        } else if (m[3] === 'k') {
+          // 構成キーは、枠線のない淡い地の角丸に入れる。白地に枠線の注釈マーカーと見分けるため
+          const w = textWidth(m[4], KEY_FS) + KEY_PADX * 2;
+          out += `<rect x="${r1(cx + KEY_GAP)}" y="${r1(y - 11.5)}" width="${r1(w)}" height="15" rx="3" fill="${mix(P.base, theme.key.surface, 0.12)}"/>`;
+          out += text(m[4], `x="${r1(cx + KEY_GAP + w / 2)}" y="${r1(y - 11.5 + 7.5 + KEY_FS * 0.36)}" font-size="${KEY_FS}" font-weight="${W8.op ?? 700}" fill="${P.base}" text-anchor="middle"`);
+          cx += w + KEY_GAP * 2;
+        } else {
+          const w = textWidth(m[4], fs);
+          out += text(m[4], `x="${r1(cx)}" y="${y}" xml:space="preserve" textLength="${r1(w)}" lengthAdjust="spacing" font-size="${fs}" font-weight="${W8.op ?? 700}" fill="${color}"`);
+          cx += w;
+        }
         last = m.index + m[0].length;
       }
       run(t.slice(last), false);
       return out;
     };
     const lines = (ls, x, y) => ls.map((t, j) => richLine(t, x, y + j * FOOT_LH)).join('');
-    if (notes.length) {
-      foot += text(words.notes, `x="${colX[0]}" y="${footTop + 32}" font-size="14" font-weight="${W8.op ?? 700}" fill="${P.base}"`);
-      let y = footTop + 58;
-      for (const n of notes) {
-        // 番号なしの注釈は、番号の代わりにアスタリスクを付ける（第8.2節）
-        foot += (n.n ? noteMark(M, y - 10.5, 13, String(n.n), 9, 9.5) : noteMark(M, y - 10.5, 13, '＊', 10, 10))
-          + lines(n.lines, M + MARK_W, y);
-        y += n.lines.length * FOOT_LH + FOOT_GAP;
+    if (abbr.length) {
+      const c = mix(P.base, groundColor, 0.72);
+      foot += abbrLines.map((t, j) => richLine(t, M, abbrY + j * ABBR_LH, ABBR_FS, c)).join('');
+    }
+    if (noteCol) {
+      let y = colTop + 58;
+      if (notes.length) {
+        foot += text(words.notes, `x="${colX[0]}" y="${colTop + 32}" font-size="14" font-weight="${W8.op ?? 700}" fill="${P.base}"`);
+        for (const n of notes) {
+          // 番号なしの注釈は、番号の代わりにアスタリスクを付ける（第8.2節）
+          foot += (n.n ? noteMark(M, y - 10.5, 13, String(n.n), 9, 9.5) : noteMark(M, y - 10.5, 13, '＊', 10, 10))
+            + lines(n.lines, M + MARK_W, y);
+          y += n.lines.length * FOOT_LH + FOOT_GAP;
+        }
       }
     }
     if (hasCombo) {
       const cx = colX[1];
-      foot += text(words.combo, `x="${cx}" y="${footTop + 32}" font-size="14" font-weight="${W8.op ?? 700}" fill="${P.base}"`);
-      let y = footTop + 58;
+      foot += text(words.combo, `x="${cx}" y="${colTop + 32}" font-size="14" font-weight="${W8.op ?? 700}" fill="${P.base}"`);
+      let y = colTop + 58;
       if (commonLines.length) { foot += lines(commonLines, cx, y); y += commonLines.length * FOOT_LH + FOOT_GAP; }
       for (const it of combos) {
         const col = comboColor(it.c), w = headW(it.head), top = y - 10.5;
         foot += (col.defs || '') + `<rect x="${r1(cx)}" y="${r1(top)}" width="${r1(w)}" height="${HEAD_H}" rx="${r1(HEAD_H * COMBO_R)}" fill="${col.bg}"/>`
           + withIcon(it.head.icon, it.head.text, cx + w / 2, top + HEAD_H / 2, HEAD_FS, `font-size="${HEAD_FS}" font-weight="${W8.label ?? 700}" fill="${col.fg}"`, col.fg)
-          + lines(it.lines, r1(cx + w + HEAD_GAP), y);
+          + lines(it.lines, r1(cx + headCol + HEAD_GAP), y);
         y += it.lines.length * FOOT_LH + FOOT_GAP;
       }
     }

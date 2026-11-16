@@ -85,7 +85,7 @@
                   "properties": {
                     "text": { "type": "string", "description": "正式名" },
                     "icon": { "const": "one-shot", "description": "ワンショット修飾キー（第4.7節）" },
-                    "short": { "type": "string", "description": "短縮表記。セルに収まらないときに描画プログラムが使い、正式名をそのキーの注釈に載せる（第10.4節）。記号1文字だけにはしない" },
+                    "short": { "type": "string", "description": "短縮表記。セルに収まらないときに描画プログラムが使い、正式名を短縮表記の一覧に載せる（第10.4節）。記号1文字だけにはしない" },
                     "hold": { "type": "string", "description": "このレイヤーでの Hold の機能名（第4.5節）。下部に、このレイヤーの淡い色の帯で描く。Base と同じ Hold は書かない" }
                   }
                 }
