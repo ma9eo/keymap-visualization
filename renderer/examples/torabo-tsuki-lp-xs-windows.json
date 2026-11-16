@@ -11,7 +11,7 @@
       "commit": "fab5a49",
       "path": "config/keymap.keymap"
     },
-    "spec": "キーマップ可視化 デザインルール v0.3 Draft"
+    "spec": "キーマップ可視化 デザインルール v0.4 Draft"
   },
   "layers": [
     {
