@@ -13,7 +13,13 @@ node renderer/render.mjs renderer/examples/torabo-tsuki-lp-xs-windows.json -o ke
 | オプション | 内容 |
 |---|---|
 | `--theme <名前\|パス>` | テーマ。名前なら `themes/<名前>.json` を使う。省略すると既定テーマ（`clay`） |
-| `-o <パス>` | 出力先。省略すると標準出力に書く |
+| `-o <パス>` | 出力先。省略すると標準出力に書く。図の組では出力先ディレクトリ |
+
+OS別の図など、組になる図は、中間データをまとめて渡します。表示スロットの割り当てとキーの大きさを組全体で揃えて、各図を `<出力先>/<中間データの名前>.svg` に書きます（仕様 第10.10節）。
+
+```
+node renderer/render.mjs keymap-windows.json keymap-macos.json -o out
+```
 
 ## 流れ
 

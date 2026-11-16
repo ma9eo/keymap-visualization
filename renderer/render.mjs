@@ -3,8 +3,10 @@
 // 中間データ（JSON）とテーマ（JSON）から SVG を描く。外部ライブラリは使わない。
 //
 //   node renderer/render.mjs <中間データ.json> [--theme <名前|パス>] [-o <出力.svg>]
+//   node renderer/render.mjs <図1.json> <図2.json> … [--theme <名前|パス>] [-o <出力先ディレクトリ>]
 //
 // --theme を省略すると既定テーマ（themes/clay.json）を使う。
+// 複数の中間データは図の組（OS別の図など）として扱い、表示スロットと寸法を組全体で揃える（第2章）。
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -71,14 +73,16 @@ function wrap(s, max, fs) {
 // 記号1文字だけの短縮表記は、キーの出力と取り違えるので使わない（第10.4節）
 const oneSymbol = (t) => typeof t === 'string' && /^[^\p{L}\p{N}]$/u.test(t.trim());
 function fail(msg) { console.error(`エラー: ${msg}`); process.exit(1); }
+// 図の組では、どの図の警告かが分かるようにファイル名を付ける
+const say = (d, msg) => console.error(d?._name ? `${d._name}: ${msg}` : msg);
 
 function parseArgs(argv) {
-  const a = { theme: 'clay' };
+  const a = { theme: 'clay', data: [] };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--theme') a.theme = argv[++i];
     else if (argv[i] === '-o' || argv[i] === '--out') a.out = argv[++i];
     else if (argv[i] === '-h' || argv[i] === '--help') a.help = true;
-    else a.data = argv[i];
+    else a.data.push(argv[i]);
   }
   return a;
 }
@@ -105,7 +109,7 @@ function loadIcons() {
 }
 
 // 描くのに必要な項目だけを確認する（厳密な検証は schema.json で行う）
-function validate(d) {
+function validate(d, name = '') {
   const errs = [];
   if (!d.meta?.keyboard) errs.push('meta.keyboard がありません');
   if (!d.meta?.os) errs.push('meta.os がありません');
@@ -150,7 +154,7 @@ function validate(d) {
     if (c.kind === 'layer' && ![].concat(c.layer ?? []).length) errs.push(`Combo「${c.text}」: layer がありません`);
     if (c.kind === 'layer') for (const l of [].concat(c.layer ?? [])) if (!layerIds.has(l)) errs.push(`Combo「${c.text}」: 未定義のレイヤー ${l}`);
   }
-  if (errs.length) fail('中間データに誤りがあります\n- ' + errs.join('\n- '));
+  if (errs.length) fail(`${name ? name + ' の' : ''}中間データに誤りがあります\n- ` + errs.join('\n- '));
 }
 
 // ---------------------------------------------------------------- 寸法（テーマの寸法から全キー共通の配分を作る）
@@ -163,8 +167,8 @@ function layout(theme, data, k = 1) {
   const fs = { base: dm.baseText * KS / k, cell: dm.cellText * KS / k, op: dm.opText * KS / k, label: dm.labelText * KS / k };
   const rowY = [...Array(rows)].map((_, i) => PAD + i * (cellH + COL_GAP));
   const topEnd = rows ? rowY[rows - 1] + cellH : PAD;
-  // 下部の行数は、全キーの中で最も多い操作表示の数（第10.2節）
-  const opLines = Math.max(0, ...data.keys.map((k) => opRows(k).length));
+  // 下部の行数は、全キーの中で最も多い操作表示の数（第10.2節）。図の組では組全体で揃える（assignSlots が決める）
+  const opLines = data._opLines;
   const lineH = Math.max(barH, fs.op * 1.35);
   const opY = [...Array(opLines)].map((_, i) => KS - PAD - lineH * (opLines - i) + lineH / 2); // 各行の中心
   const bottomStart = opLines ? KS - PAD - lineH * opLines : KS - PAD;
@@ -436,31 +440,36 @@ function compressSplit(data) {
 
 // 表示スロットの割り当て（第3.2節）。凡例の順に、同じキーに出力を持つレイヤーが使っていない最も若いスロットを選ぶ
 // 同じキーに同時に出力を持たないレイヤー同士はスロットを共有する。各レイヤーの位置は全キーで同じになる
-function assignSlots(data) {
-  const co = Object.fromEntries(shown(data).map((l) => [l.id, new Set()]));
-  for (const k of data.keys) { const ids = Object.keys(k.cells || {}); for (const a of ids) for (const b of ids) if (a !== b) co[a].add(b); }
+// 図の組（第2章）では、組のすべての図を合わせて判定し、どの図も同じ割り当てと同じ下部の行数にする
+function assignSlots(datas) {
+  const ids = datas[0].layers.map((l) => l.id).filter((id) => datas.some((d) => shown(d).some((l) => l.id === id)));
+  const co = Object.fromEntries(ids.map((id) => [id, new Set()]));
+  for (const d of datas) for (const k of d.keys) { const c = Object.keys(k.cells || {}); for (const x of c) for (const y of c) if (x !== y) co[x].add(y); }
   const slot = {};
-  for (const l of shown(data)) { let i = 0; while (Object.entries(slot).some(([m, v]) => v === i && co[l.id].has(m))) i++; slot[l.id] = i; }
-  data._nSlots = Math.max(0, ...Object.values(slot).map((v) => v + 1));
-  data.keys.forEach((k) => { k._layerIndex = slot; });
+  for (const id of ids) { let i = 0; while (Object.entries(slot).some(([m, v]) => v === i && co[id].has(m))) i++; slot[id] = i; }
+  const n = Math.max(0, ...Object.values(slot).map((v) => v + 1));
+  for (const d of datas) { d._nSlots = n; d.keys.forEach((k) => { k._layerIndex = slot; }); }
+  const opLines = Math.max(0, ...datas.flatMap((d) => d.keys.map((k) => opRows(k).length)));
+  for (const d of datas) d._opLines = opLines;
 }
 
 // ---------------------------------------------------------------- 描画
-// 第10.4節の手段を試して、全キー共通の寸法と表記を決める
-function fit(theme, data) {
+// 第10.4節の手段を試して、全キー共通の寸法と表記を決める。図の組では、組のすべての図が収まる共通の寸法を選ぶ
+function fit(theme, datas) {
   // 第10.4節の順で試す：1. 文字縮小 → 2. キー拡大 → 3. 短縮表記。Comboラベル・セルの文字・基本入力を一緒に判定する
   // 全て収まる最初の組み合わせを選ぶ。どれでも残る場合は、収まらない数が最も少ない組み合わせを選び、数が同じなら基本入力の高さの不足が小さいほうを選ぶ
   // 収まらないComboは識別子方式に、収まらないセルの文字と基本入力は下限の大きさで描いて警告する
   let best = null;
   search: for (const opts of [{ shrink: true }, { shrink: true, short: true }]) {
     for (const k of ENLARGE) {
-      const l = layout(theme, data, k), isz = l.fs.op * 1.2, r = placeCombos(data, l, isz, opts), cs = placeCells(data, l, opts);
+      const l = layout(theme, datas[0], k), isz = l.fs.op * 1.2;
+      const per = datas.map((d) => ({ r: placeCombos(d, l, isz, opts), cs: placeCells(d, l, opts) }));
       // 基本入力が中央の領域（上部と下部の間）に収まり、キーの内側の幅にも収まるか
       const bottomStart = l.opY.length ? l.opY[0] - l.lineH / 2 : KS - PAD;
       const vover = Math.max(0, l.topEnd - (l.baseY - l.fs.base * 0.42), l.baseY + l.fs.base * 0.42 - bottomStart), vfail = vover > 0 ? 1 : 0;
-      const wfail = data.keys.filter((x) => x.base && baseFit(x, l).over).length;
-      const failed = r.failed + cs.failed + vfail + wfail;
-      if (!best || failed < best.failed || (failed === best.failed && vover < best.vover)) best = { l, isz, r, cs, failed, vover, opts };
+      const wfail = datas.reduce((n, d) => n + d.keys.filter((x) => x.base && baseFit(x, l).over).length, 0);
+      const failed = per.reduce((n, p) => n + p.r.failed + p.cs.failed, 0) + vfail + wfail;
+      if (!best || failed < best.failed || (failed === best.failed && vover < best.vover)) best = { l, isz, per, failed, vover, opts };
       if (!failed) break search;
     }
   }
@@ -484,25 +493,17 @@ function holdsToNotes(data, words) {
   return { ...data, keys };
 }
 
-function render(data, theme, icons) {
+// fit で決めた寸法と表記で、図の組の i 枚目を描く
+function render(data, theme, icons, best, i) {
   const P = palette(theme, data);
   const W8 = theme.dims.weights || {};
   const words = WORDS[data.meta.language] || WORDS.ja;
-  assignSlots(data);
-  let best = fit(theme, data);
-  // 追加レイヤー内の Hold を下部に描くと収まらない場合は、その図のすべてを注釈にまとめる（第4.5節）。図の中で表し方を混ぜない
-  if (best.failed && data.keys.some((k) => Object.values(k.cells || {}).some((v) => v?.hold))) {
-    const alt = holdsToNotes(data, words);
-    assignSlots(alt);
-    const b2 = fit(theme, alt);
-    if (b2.failed < best.failed) { data = alt; best = b2; console.error('情報: 追加レイヤーの Hold を下部に描くと収まらないため、この図ではすべて注釈にまとめました（第4.5節）'); }
-  }
-  const L = best.l, iconSize = best.isz, placed = best.r, cellDraw = best.cs.cells;
+  const L = best.l, iconSize = best.isz, placed = best.per[i].r, cellDraw = best.per[i].cs.cells;
   const { labels, idents } = placed;
   for (const [k, m] of cellDraw) for (const [id, c] of Object.entries(m)) {
-    if (c.over) console.error(`警告: ${k.base || k.id} の ${id} セル「${c.full}」が${SHRINK.at(-1) * 100}%に縮めても収まりません。短縮表記（short）を指定してください`);
+    if (c.over) say(data, `警告: ${k.base || k.id} の ${id} セル「${c.full}」が${SHRINK.at(-1) * 100}%に縮めても収まりません。短縮表記（short）を指定してください`);
   }
-  for (const k of data.keys) if (k.base && baseFit(k, L).over) console.error(`警告: ${k.id} の基本入力「${k.base}」が${SHRINK.at(-1) * 100}%に縮めても収まりません。表記を短くしてください`);
+  for (const k of data.keys) if (k.base && baseFit(k, L).over) say(data, `警告: ${k.id} の基本入力「${k.base}」が${SHRINK.at(-1) * 100}%に縮めても収まりません。表記を短くしてください`);
 
   const icon = (id, x, cy, color, size = iconSize) => {
     const ic = icons[id], s = size / 24, iconSize_ = size;
@@ -699,18 +700,57 @@ ${fontImport}<defs>${keyDefs(theme)}</defs><rect width="100%" height="100%" fill
 }
 
 // ---------------------------------------------------------------- 実行
+// 図の組は、キーの配置・分割型かどうか・レイヤーの並びと色が同じでなければならない（第2章）
+function checkGroup(datas, names) {
+  const errs = [], [a] = datas;
+  const keyOf = (k) => JSON.stringify([k.x, k.y, k.rot ?? 0, k.rx ?? null, k.ry ?? null]);
+  const layerOf = (d) => JSON.stringify(d.layers.map((l) => [l.id, l.name, l.color ?? null]));
+  datas.slice(1).forEach((d, j) => {
+    const n = names[j + 1];
+    if (d.meta.split !== a.meta.split) errs.push(`${n}: meta.split が ${names[0]} と違います`);
+    if (layerOf(d) !== layerOf(a)) errs.push(`${n}: layers の id・表示名・色・並び順が ${names[0]} と違います`);
+    const ka = new Map(a.keys.map((k) => [k.id, keyOf(k)])), kd = new Map(d.keys.map((k) => [k.id, keyOf(k)]));
+    for (const [id, v] of ka) if (kd.get(id) !== v) errs.push(`${n}: キー ${id} が ${names[0]} にあり、${kd.has(id) ? '位置や回転が違います' : n + ' にありません'}`);
+    for (const id of kd.keys()) if (!ka.has(id)) errs.push(`${n}: キー ${id} が ${names[0]} にありません`);
+  });
+  if (errs.length) fail('図の組の中間データが揃っていません（第2章）\n- ' + errs.join('\n- '));
+}
+
 const args = parseArgs(process.argv.slice(2));
-if (args.help || !args.data) {
-  console.log('使い方: node renderer/render.mjs <中間データ.json> [--theme <名前|パス>] [-o <出力.svg>]');
+if (args.help || !args.data.length) {
+  console.log('使い方: node renderer/render.mjs <中間データ.json> [--theme <名前|パス>] [-o <出力.svg>]\n       node renderer/render.mjs <図1.json> <図2.json> … [--theme <名前|パス>] [-o <出力先ディレクトリ>]');
   process.exit(args.help ? 0 : 1);
 }
-const data = loadJSON(args.data, '中間データ');
-validate(data);
-for (const k of data.keys) if (k.base && typeof k.base === 'object') { k.baseIcon = k.base.icon; k.base = k.base.text; }
-// 基本入力と同じ出力のセルは、&trans と同じく描かない（第9.1節）
-for (const k of data.keys) for (const [id, v] of Object.entries(k.cells || {})) {
-  const c = cellOf(v);
-  if (k.base && c.text === k.base && (c.icon ?? null) === (k.baseIcon ?? null) && !c.hold) { delete k.cells[id]; console.error(`警告: ${k.id} の ${id} セル「${c.text}」は基本入力と同じ出力なので描きません。中間データから外してください（第9.1節）`); }
+const group = args.data.length > 1, names = args.data.map((p) => path.basename(p));
+let datas = args.data.map((p, i) => {
+  const data = loadJSON(p, '中間データ');
+  validate(data, group ? names[i] : '');
+  if (group) data._name = names[i];
+  for (const k of data.keys) if (k.base && typeof k.base === 'object') { k.baseIcon = k.base.icon; k.base = k.base.text; }
+  // 基本入力と同じ出力のセルは、&trans と同じく描かない（第9.1節）
+  for (const k of data.keys) for (const [id, v] of Object.entries(k.cells || {})) {
+    const c = cellOf(v);
+    if (k.base && c.text === k.base && (c.icon ?? null) === (k.baseIcon ?? null) && !c.hold) { delete k.cells[id]; say(data, `警告: ${k.id} の ${id} セル「${c.text}」は基本入力と同じ出力なので描きません。中間データから外してください（第9.1節）`); }
+  }
+  return data;
+});
+if (group) checkGroup(datas, names);
+datas = datas.map(compressSplit);
+const theme = loadTheme(args.theme), icons = loadIcons();
+assignSlots(datas);
+let best = fit(theme, datas);
+// 追加レイヤー内の Hold を下部に描くと収まらない場合は、図（図の組ではすべての図）の Hold を注釈にまとめる（第4.5節）。表し方を混ぜない
+if (best.failed && datas.some((d) => d.keys.some((k) => Object.values(k.cells || {}).some((v) => v?.hold)))) {
+  const alt = datas.map((d) => holdsToNotes(d, WORDS[d.meta.language] || WORDS.ja));
+  assignSlots(alt);
+  const b2 = fit(theme, alt);
+  if (b2.failed < best.failed) { datas = alt; best = b2; console.error(`情報: 追加レイヤーの Hold を下部に描くと収まらないため、${group ? 'この図の組' : 'この図'}ではすべて注釈にまとめました（第4.5節）`); }
 }
-const svg = render(compressSplit(data), loadTheme(args.theme), loadIcons());
-if (args.out) fs.writeFileSync(args.out, svg); else process.stdout.write(svg);
+const svgs = datas.map((d, i) => render(d, theme, icons, best, i));
+if (!group) {
+  if (args.out) fs.writeFileSync(args.out, svgs[0]); else process.stdout.write(svgs[0]);
+} else {
+  // 図の組は、出力先ディレクトリ（省略時は各中間データと同じ場所）に、中間データと同じ名前の .svg で書く
+  if (args.out) fs.mkdirSync(args.out, { recursive: true });
+  args.data.forEach((p, i) => fs.writeFileSync(path.join(args.out || path.dirname(p), path.basename(p).replace(/\.json$/i, '') + '.svg'), svgs[i]));
+}
