@@ -571,8 +571,9 @@ function fit(theme, datas) {
   // 全て収まる最初の組み合わせを選ぶ。どれでも残る場合は、収まらない数が最も少ない組み合わせを選び、数が同じなら基本入力の高さの不足が小さいほうを選ぶ
   // 収まらないComboは識別子方式に、収まらないセルの文字と基本入力は下限の大きさで描いて警告する
   let best = null;
+  // 50%までの縮小は、キー拡大を上限まで使ってから行う。小さいキー拡大と組み合わせて試すと、キー拡大より先に50%までの縮小が選ばれるため
   search: for (const opts of [{}, { short: true }, { short: true, deep: true }]) {
-    for (const k of ENLARGE) {
+    for (const k of opts.deep ? ENLARGE.slice(-1) : ENLARGE) {
       const l = layout(theme, datas[0], k), isz = l.fs.op * 1.2;
       const per = datas.map((d) => ({ r: placeCombos(d, l, isz, opts), cs: placeCells(d, l, opts), os: placeOps(d, l, isz, opts) }));
       // 基本入力が中央の領域（上部と下部の間）に収まり、キーの内側の幅にも収まるか
@@ -753,11 +754,13 @@ function render(data, theme, icons, best, i) {
     rows.forEach((op, i) => {
       const cy = L.opY[L.opY.length - rows.length + i];
       if (op.kind === 'switch') {
-        const c = P.C[op.layer], name = c.name;
-        const tw = textWidth(name, L.fs.op) + (op.icon ? iconSize + 2.5 : 0), x = KS / 2 - tw / 2;
+        // ラベルに収まらなければ、操作アイコンを含めた幅がラベルの幅に収まるまで、文字とアイコンを一緒に縮める
+        const c = P.C[op.layer], name = c.name, full = textWidth(name, L.fs.op) + (op.icon ? iconSize + 2.5 : 0);
+        const f = Math.max(SHRINK.at(-1), Math.min(1, (KS - PAD * 2 - 6) / full)), fs = L.fs.op * f, isz = iconSize * f, ig = 2.5 * f;
+        const tw = full * f, x = KS / 2 - tw / 2;
         g += `<rect x="${PAD}" y="${r1(cy - L.barH / 2)}" width="${KS - PAD * 2}" height="${r1(L.barH)}" rx="${r1(L.barH * 0.3)}" fill="${c.solid}"/>`
-          + (op.icon ? icon(op.icon, x, cy, '#ffffff') : '')
-          + text(name, `x="${r1(op.icon ? x + iconSize + 2.5 : KS / 2)}" y="${r1(cy + L.fs.op * 0.36)}" font-size="${r1(L.fs.op)}" font-weight="${W8.op ?? 700}" fill="#ffffff"${op.icon ? '' : ' text-anchor="middle"'}`);
+          + (op.icon ? icon(op.icon, x, cy, '#ffffff', isz) : '')
+          + text(name, `x="${r1(op.icon ? x + isz + ig : KS / 2)}" y="${r1(cy + fs * 0.36)}" font-size="${r1(fs)}" font-weight="${W8.op ?? 700}" fill="#ffffff"${op.icon ? '' : ' text-anchor="middle"'}`);
       } else if (op.kind === 'lhold' && op.to) {
         const c = P.C[op.layer], name = targetName(P, op.to), h = L.barH - 3, fs = Math.min(L.fs.op, (KS - PAD * 2 - 8 - SW_PADX * 2) / textWidth(name, 1));
         g += `<rect x="${PAD}" y="${r1(cy - L.barH / 2)}" width="${KS - PAD * 2}" height="${r1(L.barH)}" rx="${r1(L.barH * 0.3)}" fill="${c.tint}"/>`
@@ -822,8 +825,11 @@ function render(data, theme, icons, best, i) {
   const m = data.meta;
   const sep = /[\u3000-\u9fff\uff00-\uffef]$/.test(m.keyboard) ? '' : ' ';
   const title = m.title || `${m.keyboard}${sep}${words.keymap} — ${m.os}`;
-  let head = text(title, `x="${M}" y="74" font-size="30" font-weight="${W8.base ?? 700}" fill="${P.base}"`)
-    + text(`${words.source}：${m.source.repo} @ ${m.source.commit}${m.source.path ? `（${m.source.path}）` : ''}　${words.spec}：${m.spec || 'キーマップ可視化 デザインルール v0.4'}`, `x="${M}" y="104" font-size="12.5" font-weight="${W8.sub ?? 500}" fill="${P.sub}"`);
+  // 見出しと出典の行は、キャンバスの幅（左右の余白の内側）に収まらなければ、収まるまで文字を縮める（第10.7節）
+  const fitSize = (t, fs, weight) => r1(fs * Math.min(1, (W - M * 2) / proseWidth(t, fs, weight)));
+  const sourceLine = `${words.source}：${m.source.repo} @ ${m.source.commit}${m.source.path ? `（${m.source.path}）` : ''}　${words.spec}：${m.spec || 'キーマップ可視化 デザインルール v0.4'}`;
+  let head = text(title, `x="${M}" y="74" font-size="${fitSize(title, 30, W8.base ?? 700)}" font-weight="${W8.base ?? 700}" fill="${P.base}"`)
+    + text(sourceLine, `x="${M}" y="104" font-size="${fitSize(sourceLine, 12.5, W8.sub ?? 500)}" font-weight="${W8.sub ?? 500}" fill="${P.sub}"`);
   let lx = M;
   // 凡例は、先頭に Base（白地に枠線）を置き、追加レイヤーを続ける（第10.7節）
   for (const id of ['base', ...shown(data).map((l) => l.id)]) {
