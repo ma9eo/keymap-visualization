@@ -31,8 +31,8 @@ const ONE_SHOT = { size: 1.2, gap: 0.1 }; // ワンショットアイコンの�
 const SPLIT_GAP = 100; // 第10.1節：分割型の左右の間隔（1u）
 const ICON_FILES = { 'tap-2': 'tap-2.svg', 'tap-3': 'tap-3.svg', toggle: 'toggle.svg', to: 'to.svg', 'one-shot': 'one-shot.svg' };
 const WORDS = {
-  ja: { keymap: 'キーマップ', source: '出典', spec: '仕様', notes: '注釈', combo: 'Combo', and: '＋', dash: ' — ', colon: '：', stop: '。', goTo: (n) => `${n}レイヤーへ切り替える`, holdIn: (n, t) => `${n}で長押し：${t}`, viaGo: { toggle: (n) => `${n}レイヤーをトグルで切り替える`, to: (n) => `${n}レイヤーへ移動する`, 'one-shot': (n) => `次の1キーだけ${n}レイヤーにする` } },
-  en: { keymap: 'Keymap', source: 'Source', spec: 'Spec', notes: 'Notes', combo: 'Combos', and: '+', dash: ' — ', colon: ': ', stop: '. ', goTo: (n) => `Switches to the ${n} layer`, holdIn: (n, t) => `Hold in ${n}: ${t}`, viaGo: { toggle: (n) => `Toggles the ${n} layer`, to: (n) => `Moves to the ${n} layer`, 'one-shot': (n) => `Activates the ${n} layer for the next key` } },
+  ja: { keymap: 'キーマップ', source: '出典', spec: '仕様', notes: '注釈', combo: 'Combo', and: '＋', dash: ' — ', colon: '：', stop: '。', goTo: (id) => `[[${id}]]へ切り替える`, holdIn: (id, t) => `[[${id}:in]]で長押し：${t}`, viaGo: { toggle: (id) => `[[${id}]]をトグルで切り替える`, to: (id) => `[[${id}]]へ移動する`, 'one-shot': (id) => `次の1キーだけ[[${id}]]にする` } },
+  en: { keymap: 'Keymap', source: 'Source', spec: 'Spec', notes: 'Notes', combo: 'Combos', and: '+', dash: ' — ', colon: ': ', stop: '. ', goTo: (id) => `Switches to [[${id}]]`, holdIn: (id, t) => `Hold in [[${id}:in]]: ${t}`, viaGo: { toggle: (id) => `Toggles [[${id}]]`, to: (id) => `Moves to [[${id}]]`, 'one-shot': (id) => `Activates [[${id}]] for the next key` } },
 };
 
 // ---------------------------------------------------------------- 色
@@ -57,13 +57,17 @@ const textWidth = (s, fs) => [...s].reduce((w, ch) => w + (cjk(ch) ? fs : fs * 0
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const text = (s, attrs) => `<text ${attrs}>${esc(s)}</text>`;
 const r1 = (v) => Math.round(v * 100) / 100;
+// 文章中のレイヤー（第8.2節・第10.10節）：[[id]] はそのレイヤーへ行く（濃い色のラベルで描く）、[[id:in]] はそのレイヤーにいる間（レイヤー名の文字のまま描く）
+const LAYER_REF = /\[\[([^\]:]+)(?::(in))?\]\]/g;
+const layerRefs = (t) => [...String(t ?? '').matchAll(LAYER_REF)];
 // 幅 max に収まるよう折り返す。英数字の連なりは途中で切らず（1行に収まらないものだけ1文字ずつ切る）、句読点や閉じ括弧は行頭に置かない
-function wrap(s, max, fs) {
-  const tokens = (s.match(/[\x21-\x7e]+ *| +|./gu) || []).flatMap((t) => (textWidth(t.trimEnd(), fs) > max ? [...t] : [t]));
+// レイヤーの印（[[id]]・[[id:in]]）は途中で切らない。幅は measure で測る（印はラベルの幅になる）
+function wrap(s, max, fs, measure = textWidth) {
+  const tokens = (s.match(/\[\[[^\]]+\]\]|(?:(?!\[\[)[\x21-\x7e])+ *| +|./gu) || []).flatMap((t) => (!t.startsWith('[[') && measure(t.trimEnd(), fs) > max ? [...t] : [t]));
   const lines = [];
   let cur = '';
   for (const t of tokens) {
-    if (cur && textWidth(cur + t.trimEnd(), fs) > max && !/^[、。，．・：；！？）」』】〕,.:;!?)\]]/u.test(t)) { lines.push(cur.trimEnd()); cur = t.trimStart(); }
+    if (cur && measure(cur + t.trimEnd(), fs) > max && !/^[、。，．・：；！？）」』】〕,.:;!?)\]]/u.test(t)) { lines.push(cur.trimEnd()); cur = t.trimStart(); }
     else cur += t;
   }
   if (cur.trim()) lines.push(cur.trimEnd());
@@ -155,6 +159,8 @@ function validate(d, name = '') {
     if (c.kind === 'layer' && ![].concat(c.layer ?? []).length) errs.push(`Combo「${c.text}」: layer がありません`);
     if (c.kind === 'layer') for (const l of [].concat(c.layer ?? [])) if (!layerIds.has(l)) errs.push(`Combo「${c.text}」: 未定義のレイヤー ${l}`);
   }
+  const texts = [...(d.keys || []).map((k) => k.note), ...(d.notes || []), ...(d.combos || []).map((c) => c.note), d.comboNote];
+  for (const t of texts) for (const m of layerRefs(t)) if (!layerIds.has(m[1])) errs.push(`文章中のレイヤーの印 ${m[0]} の id が layers にありません: ${t}`);
   if (errs.length) fail(`${name ? name + ' の' : ''}中間データに誤りがあります\n- ` + errs.join('\n- '));
 }
 
@@ -492,7 +498,7 @@ function holdsToNotes(data, words) {
     const parts = [];
     const cells = Object.fromEntries(Object.entries(k.cells || {}).map(([id, v]) => {
       if (!v?.hold) return [id, v];
-      parts.push(words.holdIn(name[id], v.hold));
+      parts.push(words.holdIn(id, v.hold));
       const { hold, ...rest } = v;
       return [id, rest];
     }));
@@ -549,7 +555,7 @@ function render(data, theme, icons, best, i) {
   const keysOf = (c) => c.keys.map((id) => K[id]?.base || id).join(words.and);
   // 目的で表したレイヤー切り替えのComboは、切り替え先をCombo欄に書く（第6章）
   const layerName = Object.fromEntries(data.layers.map((l) => [l.id, l.name]));
-  const goNote = (c) => (c.letter && comboIcon(c) ? words.viaGo[c.via](layerName[c.layer]) : c.kind === 'go' && c.text !== layerName[c.layer] ? words.goTo(layerName[c.layer]) : '');
+  const goNote = (c) => (c.letter && comboIcon(c) ? words.viaGo[c.via](c.layer) : c.kind === 'go' && c.text !== layerName[c.layer] ? words.goTo(c.layer) : '');
   const comboLine = (c) => `${keysOf(c)}${words.dash}${[c.text, goNote(c), c.note].filter(Boolean).map((t, i, a) => (a.length > 1 ? end(t) : t)).join(words.stop === '。' ? '' : ' ')}`;
   // Combo欄の各行の頭には、キーマップ上と同じ見た目のマーク（識別子、またはラベル）を付ける
   const HEAD_FS = 9.5, HEAD_H = 13, HEAD_GAP = 9;
@@ -568,9 +574,15 @@ function render(data, theme, icons, best, i) {
   const comboCommon = data.comboNote && data.combos?.length ? data.comboNote : '';
   const hasCombo = combos.length > 0 || !!comboCommon;
   const noteW = (hasCombo ? colX[1] - FOOT_COL_GAP : W - M) - (M + MARK_W), comboW = W - M - colX[1];
-  const commonLines = comboCommon ? wrap(comboCommon, comboW, FOOT_FS) : [];
-  notes.forEach((n) => { n.lines = wrap(n.text, noteW, FOOT_FS); });
-  combos.forEach((it) => { it.lines = wrap(it.body, comboW - headW(it.head) - HEAD_GAP, FOOT_FS); });
+  // 文章中のレイヤーはラベルで描く（第3.1節）。ラベルの幅も折り返しの計算に含める
+  const REF_FS = 10.5, REF_PADX = 5, REF_GAP = 2, REF_H = 15;
+  const refW = (id) => textWidth(P.C[id].name, REF_FS) + REF_PADX * 2 + REF_GAP * 2;
+  const richWidth = (t, fs) => { let w = 0, last = 0; for (const m of layerRefs(t)) { w += textWidth(t.slice(last, m.index), fs) + refW(m[1]); last = m.index + m[0].length; } return w + textWidth(t.slice(last), fs); };
+  // いる間の条件としてのレイヤー（[[id:in]]）は、ラベルにせずレイヤー名の文字に置き換える。ラベルが多いと文章が読みにくくなるため
+  const plainIn = (t) => t.replace(/\[\[([^\]:]+):in\]\]/g, (_, id) => P.C[id].name);
+  const commonLines = comboCommon ? wrap(plainIn(comboCommon), comboW, FOOT_FS, richWidth) : [];
+  notes.forEach((n) => { n.lines = wrap(plainIn(n.text), noteW, FOOT_FS, richWidth); });
+  combos.forEach((it) => { it.lines = wrap(plainIn(it.body), comboW - headW(it.head) - HEAD_GAP, FOOT_FS, richWidth); });
   const comboItems = combos.map((it) => it.lines);
   const colH = (items) => items.reduce((h, ls) => h + ls.length * FOOT_LH + FOOT_GAP, 0);
   const footH = Math.max(colH(notes.map((n) => n.lines)), colH(commonLines.length ? [commonLines, ...comboItems] : comboItems));
@@ -673,7 +685,22 @@ function render(data, theme, icons, best, i) {
   if (notes.length || hasCombo) {
     foot += `<path d="M${M} ${footTop} H${W - M}" stroke="${mix(P.base, theme.ground?.to || '#ffffff', 0.15)}" stroke-width="1"/>`;
     const body = `font-size="${FOOT_FS}" font-weight="${W8.sub ?? 500}" fill="${P.base}"`;
-    const lines = (ls, x, y) => ls.map((t, j) => text(t, `x="${x}" y="${y + j * FOOT_LH}" ${body}`)).join('');
+    // 1行を、文字の部分とレイヤーのラベルに分けて描く。ラベルの前の文字は、見積もった幅に合わせて字間を整え、ラベルと重ならないようにする
+    const richLine = (t, x, y) => {
+      let out = '', cx = x, last = 0;
+      const run = (u, fit) => { if (!u) return; const w = textWidth(u, FOOT_FS); out += text(u, `x="${r1(cx)}" y="${y}" xml:space="preserve"${fit ? ` textLength="${r1(w)}" lengthAdjust="spacing"` : ''} ${body}`); cx += w; };
+      for (const m of layerRefs(t)) {
+        run(t.slice(last, m.index), true);
+        const c = P.C[m[1]], w = textWidth(c.name, REF_FS) + REF_PADX * 2;
+        out += `<rect x="${r1(cx + REF_GAP)}" y="${r1(y - 11)}" width="${r1(w)}" height="${REF_H}" rx="${r1(REF_H * 0.3)}" fill="${c.solid}"/>`
+          + text(c.name, `x="${r1(cx + REF_GAP + w / 2)}" y="${r1(y - 11 + REF_H / 2 + REF_FS * 0.36)}" font-size="${REF_FS}" font-weight="${W8.op ?? 700}" fill="#ffffff" text-anchor="middle"`);
+        cx += w + REF_GAP * 2;
+        last = m.index + m[0].length;
+      }
+      run(t.slice(last), false);
+      return out;
+    };
+    const lines = (ls, x, y) => ls.map((t, j) => richLine(t, x, y + j * FOOT_LH)).join('');
     if (notes.length) {
       foot += text(words.notes, `x="${colX[0]}" y="${footTop + 32}" font-size="14" font-weight="${W8.op ?? 700}" fill="${P.base}"`);
       let y = footTop + 58;

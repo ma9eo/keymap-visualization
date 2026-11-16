@@ -113,7 +113,7 @@
               { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/switch" } }
             ]
           },
-          "note": { "type": "string", "description": "そのキーの注釈の本文（第8章）。番号とマーカーは描画プログラムが付ける" }
+          "note": { "type": "string", "description": "そのキーの注釈の本文（第8章）。番号とマーカーは描画プログラムが付ける。レイヤーに触れるときは [[id]]（行く）・[[id:in]]（いる間）と書く" }
         }
       }
     },
@@ -127,7 +127,7 @@
           "keys": { "type": "array", "minItems": 2, "items": { "type": "string" }, "description": "構成キーの id" },
           "text": { "type": "string", "description": "機能名。レイヤー切り替え（go）では切り替え先レイヤーの名前か、切り替える目的" },
           "short": { "type": "string", "description": "短縮表記。ラベルが収まらないときに描画プログラムが使い、正式名をCombo欄に載せる（第6.1節・第10.4節）。記号1文字だけにはしない" },
-          "note": { "type": "string", "description": "Comboの補足（有効条件など）。Combo欄に載せる（第6章）" },
+          "note": { "type": "string", "description": "Comboの補足（有効条件など）。Combo欄に載せる（第6章）。レイヤーに触れるときは [[id]]（行く）・[[id:in]]（いる間）と書く" },
           "kind": {
             "type": "string",
             "enum": ["base", "layer", "go"],
@@ -143,11 +143,11 @@
     },
     "comboNote": {
       "type": "string",
-      "description": "多くのComboに共通の有効条件など（第10.7節）。Combo欄の先頭に1回だけ載せる。ここに書いた内容は、個々のComboの note から省く"
+      "description": "多くのComboに共通の有効条件など（第10.7節）。Combo欄の先頭に1回だけ載せる。ここに書いた内容は、個々のComboの note から省く。レイヤーに触れるときは [[id]]（行く）・[[id:in]]（いる間）と書く"
     },
     "notes": {
       "type": "array",
-      "description": "キーに属さない注釈の本文（第8.2節）。1項目に1つの内容を1文で書く。番号なしで注釈欄の末尾に載せる。キーの注釈は keys[].note に書く",
+      "description": "キーに属さない注釈の本文（第8.2節）。1項目に1つの内容を1文で書く。番号なしで注釈欄の末尾に載せる。キーの注釈は keys[].note に書く。レイヤーに触れるときは [[id]]（行く）・[[id:in]]（いる間）と書く",
       "items": { "type": "string" }
     }
   },
