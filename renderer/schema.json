@@ -32,7 +32,8 @@
         "osSource": { "type": "string", "description": "対象OSをキーマップの中身から推定した場合の根拠（第10.0節）。キーマップビジュアルには表示しない" },
         "layoutSource": { "type": "string", "description": "物理配置の根拠。キーの座標を決めた資料（設計データ・配列定義・写真）と決め方を書く（第9.0節）。キーマップビジュアルには表示しない" },
         "spec": { "type": "string", "description": "本仕様のバージョン" },
-        "title": { "type": "string", "description": "見出し。省略時は「キーボード名 キーマップ — OS」" }
+        "title": { "type": "string", "description": "見出し。省略時は「キーボード名 キーマップ — OS」" },
+        "baseName": { "type": "string", "default": "Base", "description": "Base の表示名（第3.1節）。凡例と、Base へ戻る切り替えのラベルに使う" }
       }
     },
     "layers": {
@@ -80,14 +81,24 @@
                 { "type": "string" },
                 {
                   "type": "object",
-                  "required": ["text"],
+                  "anyOf": [{ "required": ["text"] }, { "required": ["switch"] }],
                   "additionalProperties": false,
                   "properties": {
-                    "text": { "type": "string", "description": "正式名。出力がなく Hold だけのセルは空文字にする（セルは描かず、Hold の帯だけを描く）" },
+                    "text": { "type": "string", "description": "正式名。出力がなく Hold だけのセルは空文字にする（セルは描かず、Hold の帯だけを描く）。タップでレイヤーを切り替えるセルには書かない" },
+                    "switch": {
+                      "type": "object",
+                      "required": ["layer", "via"],
+                      "additionalProperties": false,
+                      "description": "このレイヤーにいる間だけ使えるレイヤー切り替え（第4.5節）。via が hold なら下部にこのレイヤーの淡い帯を描き、その中に行き先のラベルを置く（text にはタップの出力を書ける）。それ以外はセルの中に操作アイコンと行き先のラベルを置く（text は書かない）",
+                      "properties": {
+                        "layer": { "type": "string", "description": "行き先のレイヤーの id。Base へ戻るときは base" },
+                        "via": { "enum": ["hold", "to", "toggle", "one-shot"], "description": "切り替え方" }
+                      }
+                    },
                     "tentative": { "type": "boolean", "description": "意味を確かめていない仮の名前（第9.4節）。描画プログラムが「?」を付ける" },
                     "icon": { "const": "one-shot", "description": "ワンショット修飾キー（第4.7節）" },
                     "short": { "type": "string", "description": "短縮表記。セルに収まらないときに描画プログラムが使い、正式名を短縮表記の一覧に載せる（第10.4節）。記号1文字だけにはしない" },
-                    "hold": { "type": "string", "description": "このレイヤーでの Hold の機能名（第4.5節）。下部に、このレイヤーの淡い色の帯で描く。Base と同じ Hold は書かない" }
+                    "hold": { "type": "string", "description": "このレイヤーでの Hold の機能名（第4.5節）。下部に、このレイヤーの淡い色の帯で描く。Base と同じ Hold は書かない。レイヤー切り替えの長押しは switch に書く" }
                   }
                 }
               ]
