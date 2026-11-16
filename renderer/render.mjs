@@ -873,12 +873,17 @@ function render(data, theme, icons, best, i) {
   }
   // 識別子を積む位置は、placeCombos と同じく、最も広い識別子の幅で注釈マーカーとの重なりを判定して決める
   const stack = {}, marks = markRects(data.keys, L), wMax = identWidth((data.combos || []).length > 26 ? 'AA' : 'A', L.fs.label);
+  const drawnIdents = [];
   for (const c of listOnly ? [] : idents) {
     const col = comboColor(c);
     out += col.defs || '';
     for (const k of c.members) {
       const n = (stack[k.id] = (stack[k.id] || 0) + 1) - 1;
       const s = L.fs.label + 4, w = identWidth(c.letter, L.fs.label), x = OX + identX(k, w), y = OY + k.y + IN + L.baseY - s / 2 + identDy(k, n, s, wMax, L, marks);
+      // ほかのキーの識別子と重なったら警告する（第6.4節）
+      const g = rotRect(k, [x - OX, y - OY, w, s]), clash = drawnIdents.find((d) => d.k !== k && hit(g, d.r));
+      if (clash) say(data, `警告: ${k.base || k.id} の識別子 ${c.letter} が、${clash.k.base || clash.k.id} の識別子 ${clash.letter} と重なります（第6.4節）`);
+      drawnIdents.push({ k, r: g, letter: c.letter });
       const id = `<rect x="${r1(x)}" y="${r1(y)}" width="${r1(w)}" height="${r1(s)}" rx="${r1(s * COMBO_R)}" fill="${col.bg}"${col.stroke || ''}/>` + text(c.letter, `x="${r1(x + w / 2)}" y="${r1(y + s / 2 + L.fs.label * 0.36)}" font-size="${r1(L.fs.label)}" font-weight="${W8.label ?? 700}" fill="${col.fg}" text-anchor="middle"`);
       // 回転したキーでは、キーと同じ中心・角度で回す（第6.2節）
       out += k.rot ? `<g transform="rotate(${k.rot},${r1(OX + (k.rx ?? k.x + PITCH / 2))},${r1(OY + (k.ry ?? k.y + PITCH / 2))})">${id}</g>` : id;
