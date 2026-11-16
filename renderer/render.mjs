@@ -486,10 +486,16 @@ function render(data, theme, icons) {
   const H = footTop + (notes.length || combos.length ? 60 + footH : 0) + 40;
 
   let out = '';
+  // 使っていないキー（第9.0.1節）は、実機の形を伝えるため、文字のない薄い枠として描く
+  const inCombo = new Set((data.combos || []).flatMap((c) => c.keys));
+  const unused = (k) => !k.base && !Object.keys(k.cells || {}).length && !k.hold && !k.taps?.length && !k.switch && !k.note && !inCombo.has(k.id);
+  const groundColor = theme.ground?.type === 'linear' ? theme.ground.from : theme.ground?.color || '#ffffff';
+  const unusedShape = `<rect x=".6" y=".6" width="${KS - 1.2}" height="${KS - 1.2}" rx="${r1(L.radius)}" fill="none" stroke="${mix(P.base, groundColor, 0.22)}" stroke-width="1.2"/>`;
   // キー
   for (const k of data.keys) {
     const [x0, y0] = keyBox(k);
     const tr = `translate(${r1(OX + x0)},${r1(OY + y0)})` + (k.rot ? ` rotate(${k.rot},${r1((k.rx ?? k.x + PITCH / 2) - x0)},${r1((k.ry ?? k.y + PITCH / 2) - y0)})` : '');
+    if (unused(k)) { out += `<g transform="${tr}">${unusedShape}</g>`; continue; }
     let g = keyShape(theme);
     for (const [id, c] of Object.entries(cellDraw.get(k) || {})) {
       const [cx, cy, cw, ch] = cellRect(L, k._layerIndex[id]);
