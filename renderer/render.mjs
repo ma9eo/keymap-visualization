@@ -56,19 +56,37 @@ function readable(fg, bg, toward, min = 4.5) {
 // ---------------------------------------------------------------- 文字
 const cjk = (ch) => /[　-鿿＀-￯]/.test(ch);
 const textWidth = (s, fs) => [...s].reduce((w, ch) => w + (cjk(ch) ? fs : fs * 0.62), 0);
+// 注釈欄・Combo欄・短縮表記の一覧・見出しの文字の幅。字形に近い幅で見積もる。文字の部分は見積もった幅に textLength で合わせるので、見積もりが広いと字間が開いて見えるため
+// 英数字（0x20〜0x7e）の幅は、既定テーマの書体（M PLUS Rounded 1c）の太さ 500 と 800 で測った値（文字の大きさに対する比の100倍）。その間の太さは比例で求める
+const ASCII_W = {
+  500: [28, 35, 43, 68, 58, 84, 70, 26, 38, 38, 51, 73, 30, 47, 31, 49, 63, 63, 63, 63, 63, 63, 63, 63, 63, 63, 39, 39, 67, 75, 67, 62, 82, 64, 61, 62, 67, 59, 58, 69, 69, 33, 54, 60, 59, 82, 69, 72, 61, 73, 62, 56, 63, 66, 64, 86, 62, 62, 62, 48, 49, 48, 61, 58, 26, 54, 59, 49, 59, 53, 51, 57, 58, 32, 36, 54, 32, 79, 58, 56, 58, 58, 46, 50, 51, 57, 52, 77, 50, 52, 54, 52, 36, 52, 68],
+  800: [29, 41, 51, 70, 60, 91, 75, 31, 41, 41, 51, 74, 34, 49, 36, 52, 65, 65, 65, 65, 65, 65, 65, 65, 65, 65, 44, 44, 69, 76, 69, 65, 81, 66, 63, 65, 69, 61, 59, 72, 72, 37, 57, 66, 61, 85, 72, 75, 64, 75, 65, 60, 66, 69, 66, 89, 65, 65, 64, 52, 52, 52, 65, 60, 32, 58, 62, 52, 62, 56, 54, 61, 62, 35, 40, 59, 35, 85, 61, 59, 62, 62, 51, 53, 54, 61, 56, 81, 55, 56, 57, 55, 40, 55, 69],
+};
+const SYMBOL_W = { '←': 1, '→': 1, '↔': 1, '⇔': 1, '…': 1, '↑': 0.73, '↓': 0.73, '⇒': 0.84, '⇐': 0.84, '—': 0.95, '–': 0.47, '“': 0.5, '”': 0.5, '‘': 0.31, '’': 0.31 };
+function charWidth(ch, weight) {
+  const c = ch.codePointAt(0);
+  if (c >= 0x20 && c <= 0x7e) { const t = Math.min(1, Math.max(0, (weight - 500) / 300)); return (ASCII_W[500][c - 0x20] * (1 - t) + ASCII_W[800][c - 0x20] * t) / 100; }
+  if (cjk(ch)) return 1;
+  if (SYMBOL_W[ch]) return SYMBOL_W[ch];
+  return c >= 0xc0 && c <= 0x17f ? 0.6 : 0.62; // アクセント付きのラテン文字と、そのほかの文字
+}
+const proseWidth = (s, fs, weight = 500) => [...s].reduce((w, ch) => w + charWidth(ch, weight) * fs, 0);
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const text = (s, attrs) => `<text ${attrs}>${esc(s)}</text>`;
 const r1 = (v) => Math.round(v * 100) / 100;
 // 文章中のレイヤー（第8.2節・第10.10節）：[[id]] はそのレイヤーへ行く（濃い色のラベルで描く）、[[id:in]] はそのレイヤーにいる間（レイヤー名の文字のまま描く）
 const LAYER_REF = /\[\[([^\]:]+)(?::(in))?\]\]/g;
 const layerRefs = (t) => [...String(t ?? '').matchAll(LAYER_REF)];
-// 描画プログラムが文章に入れる部品：{{k:キー名}} はキーの形の枠、{{b:文字}} は太字（Combo欄で使う）
-const INLINE = /\[\[([^\]:]+)(?::(in))?\]\]|\{\{(k|b):([^}]*)\}\}/g;
+// 描画プログラムが文章に入れる部品：part('k', キー名) はキーの形の枠、part('b', 文字) は太字（Combo欄で使う）
+// 部品の前後は私用領域の文字（U+E000・U+E001）で区切る。出力やキー名に { } [ ] が含まれても、部品の切れ目と取り違えないため
+const PART_OPEN = '\uE000', PART_CLOSE = '\uE001';
+const part = (kind, s) => `${PART_OPEN}${kind}${String(s).replace(/[\uE000\uE001]/g, '')}${PART_CLOSE}`;
+const INLINE = /\[\[([^\]:]+)(?::(in))?\]\]|\uE000(k|b)([^\uE001]*)\uE001/g;
 const inlines = (t) => [...String(t ?? '').matchAll(INLINE)];
 // 幅 max に収まるよう折り返す。英数字の連なりは途中で切らず（1行に収まらないものだけ1文字ずつ切る）、句読点や閉じ括弧は行頭に置かない
 // レイヤーの印（[[id]]・[[id:in]]）は途中で切らない。幅は measure で測る（印はラベルの幅になる）
 function wrap(s, max, fs, measure = textWidth) {
-  const tokens = (s.match(/\[\[[^\]]+\]\]|\{\{[^}]*\}\}|(?:(?!\[\[|\{\{)[\x21-\x7e])+ *| +|./gu) || []).flatMap((t) => (!/^(\[\[|\{\{)/.test(t) && measure(t.trimEnd(), fs) > max ? [...t] : [t]));
+  const tokens = (s.match(/\uE000[^\uE001]*\uE001|\[\[[^\]]+\]\]|(?:(?!\[\[)[\x21-\x7e])+ *| +|./gu) || []).flatMap((t) => (!/^(\[\[|\uE000)/.test(t) && measure(t.trimEnd(), fs) > max ? [...t] : [t]));
   const lines = [];
   let cur = '';
   for (const t of tokens) {
@@ -161,9 +179,11 @@ function validate(d, name = '') {
     }
   }
   if (d.aux) errs.push('aux は廃止しました。Comboの補足は combos[].note に、キーに属さない情報は notes に書いてください');
+  // 文の区切りは、日本語では「。」、英語では「. 」の後に文字が続くところだけを数える。キー名の「.」「,」や「../」を区切りと見なさないため
+  const sentenceBreak = d.meta?.language === 'en' ? /\.\s+\S/ : /。(?!$)/;
   for (const n of d.notes || []) {
     if (typeof n !== 'string') errs.push('notes はキーに属さない注釈の本文（文字列）の配列にしてください。キーの注釈は keys[].note に書きます');
-    else if (/[。.．](?!$)/.test(n.trim().replace(/\d\.\d/g, ''))) console.error(`警告: 番号なしの注釈は1項目1文にしてください（第8.2節）: ${n}`);
+    else if (sentenceBreak.test(n.trim())) console.error(`警告: 番号なしの注釈は1項目1文にしてください（第8.2節）: ${n}`);
   }
   for (const c of d.combos || []) {
     if (!Array.isArray(c.keys) || c.keys.length < 2) errs.push(`Combo の keys は2つ以上必要です: ${c.text}`);
@@ -664,11 +684,11 @@ function render(data, theme, icons, best, i) {
   const abbr = [], seenAbbr = new Set();
   for (const k of sorted) for (const c of [...Object.values(cellDraw.get(k) || {}), ...(opDraw.get(k) || []).filter(Boolean)]) {
     const key = c.text + '\u0000' + c.full;
-    if (c.short && !seenAbbr.has(key)) { seenAbbr.add(key); abbr.push(`{{b:${c.text}}}${words.colon}${c.full}`); }
+    if (c.short && !seenAbbr.has(key)) { seenAbbr.add(key); abbr.push(`${part('b', c.text)}${words.colon}${c.full}`); }
   }
   // Combo欄（第6章）：識別子の対応表、短縮表記の正式名、Comboの補足
   const K = Object.fromEntries(data.keys.map((k) => [k.id, k]));
-  const keysOf = (c) => c.keys.map((id) => `{{k:${K[id]?.base || id}}}`).join('');
+  const keysOf = (c) => c.keys.map((id) => part('k', K[id]?.base || id)).join('');
   // 目的で表したレイヤー切り替えのComboは、切り替え先をCombo欄に書く（第6章）
   const layerName = Object.fromEntries(data.layers.map((l) => [l.id, l.name]));
   const goNote = (c) => (c.letter && comboIcon(c) ? words.viaGo[c.via](c.layer) : c.kind === 'go' && c.text !== layerName[c.layer] ? words.goTo(c.layer) : '');
@@ -676,7 +696,7 @@ function render(data, theme, icons, best, i) {
   const comboLine = (c, head) => {
     // 出力が行頭のラベルと同じとき、またはレイヤーの名前そのもので切り替え方の説明（○○へ移動する など）が続くときは、出力を繰り返さない
     const sameAsGo = c.kind === 'go' && goNote(c) && c.text === layerName[c.layer];
-    const out = (head?.kind === 'label' && head.text === c.text) || sameAsGo ? '' : `{{b:${c.text}}}`;
+    const out = (head?.kind === 'label' && head.text === c.text) || sameAsGo ? '' : part('b', c.text);
     const rest = [goNote(c), c.note].filter(Boolean).map(end).join(words.stop === '。' ? '' : ' ');
     return [keysOf(c), out, rest].filter(Boolean).join(comboSep);
   };
@@ -702,10 +722,13 @@ function render(data, theme, icons, best, i) {
   const REF_FS = 10.5, REF_PADX = 5, REF_GAP = 2, REF_H = 15;
   const refW = (id) => textWidth(P.C[id].name, REF_FS) + REF_PADX * 2 + REF_GAP * 2;
   const KEY_FS = 11, KEY_PADX = 4, KEY_GAP = 1.5;
-  const partW = (m, fs) => (m[1] ? refW(m[1]) : m[3] === 'k' ? textWidth(m[4], KEY_FS) + KEY_PADX * 2 + KEY_GAP * 2 : textWidth(m[4], fs));
-  const richWidth = (t, fs) => { let w = 0, last = 0; for (const m of inlines(t)) { w += textWidth(t.slice(last, m.index), fs) + partW(m, fs); last = m.index + m[0].length; } return w + textWidth(t.slice(last), fs); };
+  // 文字の部分と太字の幅は、字形に近い幅で見積もる（proseWidth）
+  const WB = W8.sub ?? 500, WO = W8.op ?? 700;
+  const partW = (m, fs) => (m[1] ? refW(m[1]) : m[3] === 'k' ? textWidth(m[4], KEY_FS) + KEY_PADX * 2 + KEY_GAP * 2 : proseWidth(m[4], fs, WO));
+  const richWidth = (t, fs) => { let w = 0, last = 0; for (const m of inlines(t)) { w += proseWidth(t.slice(last, m.index), fs, WB) + partW(m, fs); last = m.index + m[0].length; } return w + proseWidth(t.slice(last), fs, WB); };
   // いる間の条件としてのレイヤー（[[id:in]]）は、ラベルにせずレイヤー名の文字に置き換える。ラベルが多いと文章が読みにくくなるため
-  const plainIn = (t) => t.replace(/\[\[([^\]:]+):in\]\]/g, (_, id) => P.C[id].name);
+  // 部品（太字やキーの枠）の中身は、レイヤーの印として読まない
+  const plainIn = (t) => t.replace(/\uE000[^\uE001]*\uE001|\[\[([^\]:]+):in\]\]/g, (m, id) => (id ? P.C[id].name : m));
   const commonLines = comboCommon ? wrap(plainIn(comboCommon), comboW, FOOT_FS, richWidth) : [];
   notes.forEach((n) => { n.lines = wrap(plainIn(n.text), noteW, FOOT_FS, richWidth); });
   // 本文の書き出しは、行頭のマークの最大幅にそろえる
@@ -846,7 +869,7 @@ function render(data, theme, icons, best, i) {
     const richLine = (t, x, y, fs = FOOT_FS, color = P.base) => {
       let out = '', cx = x, last = 0;
       const attrs = `font-size="${fs}" font-weight="${W8.sub ?? 500}" fill="${color}"`;
-      const run = (u, fit) => { if (!u) return; const w = textWidth(u, fs); out += text(u, `x="${r1(cx)}" y="${y}" xml:space="preserve"${fit ? ` textLength="${r1(w)}" lengthAdjust="spacing"` : ''} ${attrs}`); cx += w; };
+      const run = (u, fit) => { if (!u) return; const w = proseWidth(u, fs, WB); out += text(u, `x="${r1(cx)}" y="${y}" xml:space="preserve"${fit ? ` textLength="${r1(w)}" lengthAdjust="spacing"` : ''} ${attrs}`); cx += w; };
       for (const m of inlines(t)) {
         run(t.slice(last, m.index), true);
         if (m[1]) {
@@ -861,7 +884,7 @@ function render(data, theme, icons, best, i) {
           out += text(m[4], `x="${r1(cx + KEY_GAP + w / 2)}" y="${r1(y - 11.5 + 7.5 + KEY_FS * 0.36)}" font-size="${KEY_FS}" font-weight="${W8.op ?? 700}" fill="${P.base}" text-anchor="middle"`);
           cx += w + KEY_GAP * 2;
         } else {
-          const w = textWidth(m[4], fs);
+          const w = proseWidth(m[4], fs, WO);
           out += text(m[4], `x="${r1(cx)}" y="${y}" xml:space="preserve" textLength="${r1(w)}" lengthAdjust="spacing" font-size="${fs}" font-weight="${W8.op ?? 700}" fill="${color}"`);
           cx += w;
         }
