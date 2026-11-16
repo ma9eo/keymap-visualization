@@ -21,6 +21,9 @@ const PAD = 6; // キー内側の余白
 const COL_GAP = 3; // セル同士の間隔
 const ENLARGE = [1, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3]; // 第10.4節：キー拡大の段階（最大1.3倍）
 const SHRINK = [0.95, 0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.6, 0.55, 0.5]; // 第10.4節：文字縮小の段階（読める範囲として50%まで）
+const COMBO_R = 0.5; // Comboのラベルと識別子の角丸の半径（高さに対する比）。両者で揃え、両端を半円にする（第6章）
+const LABEL_MIN_W = 3; // 境界上のComboラベルの最小幅（ラベルの文字の大きさに対する比）
+const LABEL_PAD = 0.9; // 境界上のComboラベルの左右の余白の合計（ラベルの文字の大きさに対する比）
 const ONE_SHOT = { size: 1.2, gap: 0.1 }; // ワンショットアイコンの大きさと間隔（文字の大きさに対する比）
 const SPLIT_GAP = 100; // 第10.1節：分割型の左右の間隔（1u）
 const ICON_FILES = { 'tap-2': 'tap-2.svg', 'tap-3': 'tap-3.svg', toggle: 'toggle.svg', to: 'to.svg', 'one-shot': 'one-shot.svg' };
@@ -242,6 +245,15 @@ function isHorizontalPair(a, b) {
   const overlap = Math.min(l.y, r.y) + PITCH - Math.max(l.y, r.y);
   return Math.abs(dx - PITCH) < PITCH * 0.25 && overlap > PITCH * 0.3;
 }
+// 上下に隣接する2キー。ラベルは2キーの共有する横の境界上に置く（第6.1節）
+function isVerticalPair(a, b) {
+  if (a.rot || b.rot) return false;
+  const [t, u] = a.y <= b.y ? [a, b] : [b, a];
+  const overlap = Math.min(t.x, u.x) + PITCH - Math.max(t.x, u.x);
+  return Math.abs(u.y - t.y - PITCH) < PITCH * 0.25 && overlap > PITCH * 0.3;
+}
+// 境界上のComboラベルの幅。1文字のラベルが小さな丸に見えて読みにくくならないよう、最小幅を設ける（第5章）
+const labelWidth = (t, fsz) => Math.max(textWidth(t, fsz) + fsz * LABEL_PAD, fsz * LABEL_MIN_W);
 
 function obstacles(k, L, iconSize, opts = {}) {
   const [x0, y0] = keyBox(k);
@@ -325,15 +337,19 @@ function placeCombos(data, L, iconSize, opts = {}) {
   for (const c of data.combos || []) {
     const ks = c.keys.map((id) => K[id]);
     if (ks.length === 2 && isHorizontalPair(ks[0], ks[1])) labels.push({ ...c, a: ks[0].x <= ks[1].x ? ks[0] : ks[1], b: ks[0].x <= ks[1].x ? ks[1] : ks[0] });
+    else if (ks.length === 2 && isVerticalPair(ks[0], ks[1])) labels.push({ ...c, dir: 'v', a: ks[0].y <= ks[1].y ? ks[0] : ks[1], b: ks[0].y <= ks[1].y ? ks[1] : ks[0] });
     else idents.push({ ...c, members: ks });
   }
   // 候補位置：基準 → 上方向（近い行から）→ 下方向（近い行から）
   const cands = [{ name: 'base', y: L.baseY }];
   for (let i = L.rows - 1; i >= 0; i--) cands.push({ name: `top${i + 1}`, y: L.rowY[i] + L.cellH / 2 });
   L.opY.forEach((y, i) => cands.push({ name: `bottom${i + 1}`, y }));
+  // 上下の2キーは、共有する横の境界の中央に置く。位置の候補はこの1つだけ
+  const vSpan = (c) => [Math.max(c.a.x, c.b.x) + IN, Math.min(c.a.x, c.b.x) + IN + KS];
   const rect = (c, cand, v = { text: c.text, f: 1 }) => {
     const fsz = L.fs.label * v.f, h = fsz + 4;
-    const w = textWidth(v.text, fsz) + fsz * 0.9;
+    const w = labelWidth(v.text, fsz);
+    if (c.dir === 'v') { const [l, r] = vSpan(c); return [(l + r) / 2 - w / 2, (c.a.y + IN + KS + c.b.y + IN) / 2 - h / 2, w, h]; }
     const cx = (c.a.x + IN + KS + c.b.x + IN) / 2;
     const ay = c.a.y + IN + cand.y, by = c.b.y + IN + cand.y;
     const top = Math.max(c.a.y, c.b.y) + IN, bottom = Math.min(c.a.y, c.b.y) + IN + KS;
@@ -349,12 +365,16 @@ function placeCombos(data, L, iconSize, opts = {}) {
   }
   // 配置済みのComboラベルも避ける（第6.1節）
   const placedRects = [];
-  const fits = (c, cand, v) => { const r = rect(c, cand, v); return [...obstacles(c.a, L, iconSize, opts), ...obstacles(c.b, L, iconSize, opts), ...identRects, ...placedRects].every((o) => !hit(r, o)); };
+  const fits = (c, cand, v) => {
+    const r = rect(c, cand, v);
+    if (c.dir === 'v') { const [l, rr] = vSpan(c); if (r[2] > rr - l) return false; } // 2キーの共通の幅に収める
+    return [...obstacles(c.a, L, iconSize, opts), ...obstacles(c.b, L, iconSize, opts), ...identRects, ...placedRects].every((o) => !hit(r, o));
+  };
   // 各Comboを個別に、候補位置の順に試す
   const fallback = [];
   for (const c of labels) {
     let placed = null;
-    for (const v of variants(c, opts)) { const cand = cands.find((cd) => fits(c, cd, v)); if (cand) { placed = { v, cand }; break; } }
+    for (const v of variants(c, opts)) { const cand = (c.dir === 'v' ? [{ name: 'border' }] : cands).find((cd) => fits(c, cd, v)); if (cand) { placed = { v, cand }; break; } }
     if (placed) { c.rect = rect(c, placed.cand, placed.v); c.cand = placed.cand.name; c.draw = placed.v; placedRects.push(c.rect); }
     else fallback.push(c); // どこにも置けなければ識別子方式へ（第6.1節）
   }
@@ -467,10 +487,13 @@ function render(data, theme, icons) {
   // 目的で表したレイヤー切り替えのComboは、切り替え先をCombo欄に書く（第6章）
   const layerName = Object.fromEntries(data.layers.map((l) => [l.id, l.name]));
   const goNote = (c) => (c.kind === 'go' && c.text !== layerName[c.layer] ? words.goTo(layerName[c.layer]) : '');
-  const comboLine = (head, c) => `${head ? head + words.colon : ''}${keysOf(c)}${words.dash}${[c.text, goNote(c), c.note].filter(Boolean).map((t, i, a) => (a.length > 1 ? end(t) : t)).join(words.stop === '。' ? '' : ' ')}`;
+  const comboLine = (c) => `${keysOf(c)}${words.dash}${[c.text, goNote(c), c.note].filter(Boolean).map((t, i, a) => (a.length > 1 ? end(t) : t)).join(words.stop === '。' ? '' : ' ')}`;
+  // Combo欄の各行の頭には、キーマップ上と同じ見た目のマーク（識別子、またはラベル）を付ける
+  const HEAD_FS = 9.5, HEAD_H = 13, HEAD_GAP = 9;
+  const headW = (h) => (h.kind === 'ident' ? HEAD_H : labelWidth(h.text, HEAD_FS));
   const combos = [
-    ...idents.map((c) => comboLine(c.letter, c)),
-    ...labels.filter((c) => c.draw?.short || c.note || goNote(c)).map((c) => comboLine(c.draw?.short ? c.draw.text : '', c)),
+    ...idents.map((c) => ({ c, head: { kind: 'ident', text: c.letter }, body: comboLine(c) })),
+    ...labels.filter((c) => c.draw?.short || c.note || goNote(c)).map((c) => ({ c, head: { kind: 'label', text: c.draw.text }, body: comboLine(c) })),
   ];
   const kbW = (maxX - minX) * KZ, kbH = (maxY - minY) * KZ;
   const W = Math.max(kbW + M * 2, 900);
@@ -480,7 +503,8 @@ function render(data, theme, icons) {
   const colX = [M, notes.length ? Math.max(M + 520, W / 2) : M];
   const noteW = (combos.length ? colX[1] - FOOT_COL_GAP : W - M) - (M + MARK_W), comboW = W - M - colX[1];
   notes.forEach((n) => { n.lines = wrap(n.text, noteW, FOOT_FS); });
-  const comboItems = combos.map((t) => wrap(t, comboW, FOOT_FS));
+  combos.forEach((it) => { it.lines = wrap(it.body, comboW - headW(it.head) - HEAD_GAP, FOOT_FS); });
+  const comboItems = combos.map((it) => it.lines);
   const colH = (items) => items.reduce((h, ls) => h + ls.length * FOOT_LH + FOOT_GAP, 0);
   const footH = Math.max(colH(notes.map((n) => n.lines)), colH(comboItems));
   const H = footTop + (notes.length || combos.length ? 60 + footH : 0) + 40;
@@ -536,7 +560,7 @@ function render(data, theme, icons) {
   };
   for (const c of labels) {
     const [x, y, w, h] = c.rect, col = comboColor(c), fsz = L.fs.label * c.draw.f;
-    out += (col.defs || '') + `<rect x="${r1(OX + x)}" y="${r1(OY + y)}" width="${r1(w)}" height="${r1(h)}" rx="${r1(h / 2)}" fill="${col.bg}"/>`
+    out += (col.defs || '') + `<rect x="${r1(OX + x)}" y="${r1(OY + y)}" width="${r1(w)}" height="${r1(h)}" rx="${r1(h * COMBO_R)}" fill="${col.bg}"/>`
       + text(c.draw.text, `x="${r1(OX + x + w / 2)}" y="${r1(OY + y + h / 2 + fsz * 0.36)}" font-size="${r1(fsz)}" font-weight="${W8.label ?? 700}" fill="${col.fg}" text-anchor="middle"`);
   }
   const stack = {};
@@ -546,14 +570,17 @@ function render(data, theme, icons) {
     for (const k of c.members) {
       const n = (stack[k.id] = (stack[k.id] || 0) + 1) - 1;
       const s = L.fs.label + 4, x = OX + k.x + IN + KS - s / 2, y = OY + k.y + IN + L.baseY - s / 2 + identDy(k, n, s, best.opts, L);
-      out += `<rect x="${r1(x)}" y="${r1(y)}" width="${r1(s)}" height="${r1(s)}" rx="${r1(s * 0.3)}" fill="${col.bg}"/>` + text(c.letter, `x="${r1(x + s / 2)}" y="${r1(y + s / 2 + L.fs.label * 0.36)}" font-size="${r1(L.fs.label)}" font-weight="${W8.label ?? 700}" fill="${col.fg}" text-anchor="middle"`);
+      out += `<rect x="${r1(x)}" y="${r1(y)}" width="${r1(s)}" height="${r1(s)}" rx="${r1(s * COMBO_R)}" fill="${col.bg}"/>` + text(c.letter, `x="${r1(x + s / 2)}" y="${r1(y + s / 2 + L.fs.label * 0.36)}" font-size="${r1(L.fs.label)}" font-weight="${W8.label ?? 700}" fill="${col.fg}" text-anchor="middle"`);
     }
   }
 
+  // 注釈マーカー（第8.1節）。Base の Combo（ダークグレーの地に白抜き）と見分けられるよう、白地にダークグレーの枠線と番号で描く
+  const noteMark = (x, y, z, label, fsz, dy) => `<rect x="${r1(x)}" y="${r1(y)}" width="${r1(z)}" height="${r1(z)}" rx="${r1(z * 0.23)}" fill="#ffffff" stroke="${P.neutral}" stroke-width="1.1"/>`
+    + text(label, `x="${r1(x + z / 2)}" y="${r1(y + dy)}" font-size="${r1(fsz)}" font-weight="700" fill="${P.neutral}" text-anchor="middle"`);
   // 注釈マーカーは最前面に描く（第8.1節）。下部の操作表示とは重なってよい
   for (const k of data.keys.filter((k) => k._noteNo)) {
     const [mx, my] = markPos(k, L), x = OX + mx, y = OY + my, z = L.mark;
-    const m = `<rect x="${r1(x)}" y="${r1(y)}" width="${r1(z)}" height="${r1(z)}" rx="${r1(z * 0.23)}" fill="${P.neutral}"/>` + text(String(k._noteNo), `x="${r1(x + z / 2)}" y="${r1(y + z * 0.74)}" font-size="${r1(z * 0.7)}" font-weight="700" fill="#ffffff" text-anchor="middle"`);
+    const m = noteMark(x, y, z, String(k._noteNo), z * 0.7, z * 0.74);
     // 回転したキーでは、キーと同じ中心・角度で回して角に合わせる
     out += k.rot ? `<g transform="rotate(${k.rot},${r1(OX + (k.rx ?? k.x + PITCH / 2))},${r1(OY + (k.ry ?? k.y + PITCH / 2))})">${m}</g>` : m;
   }
@@ -579,10 +606,8 @@ function render(data, theme, icons) {
       foot += text(words.notes, `x="${colX[0]}" y="${footTop + 32}" font-size="14" font-weight="${W8.op ?? 700}" fill="${P.base}"`);
       let y = footTop + 58;
       for (const n of notes) {
-        // 番号なしの注釈は、番号の代わりに白抜きのアスタリスクを付ける（第8.2節）
-        foot += `<rect x="${M}" y="${y - 10.5}" width="13" height="13" rx="3" fill="${P.neutral}"/>`
-          + (n.n ? text(n.n, `x="${M + 6.5}" y="${y - 1}" font-size="9" font-weight="700" fill="#ffffff" text-anchor="middle"`)
-            : text('＊', `x="${M + 6.5}" y="${y - 0.5}" font-size="10" font-weight="700" fill="#ffffff" text-anchor="middle"`))
+        // 番号なしの注釈は、番号の代わりにアスタリスクを付ける（第8.2節）
+        foot += (n.n ? noteMark(M, y - 10.5, 13, String(n.n), 9, 9.5) : noteMark(M, y - 10.5, 13, '＊', 10, 10))
           + lines(n.lines, M + MARK_W, y);
         y += n.lines.length * FOOT_LH + FOOT_GAP;
       }
@@ -591,7 +616,13 @@ function render(data, theme, icons) {
       const cx = colX[1];
       foot += text(words.combo, `x="${cx}" y="${footTop + 32}" font-size="14" font-weight="${W8.op ?? 700}" fill="${P.base}"`);
       let y = footTop + 58;
-      for (const ls of comboItems) { foot += lines(ls, cx, y); y += ls.length * FOOT_LH + FOOT_GAP; }
+      for (const it of combos) {
+        const col = comboColor(it.c), w = headW(it.head), top = y - 10.5;
+        foot += (col.defs || '') + `<rect x="${r1(cx)}" y="${r1(top)}" width="${r1(w)}" height="${HEAD_H}" rx="${r1(HEAD_H * COMBO_R)}" fill="${col.bg}"/>`
+          + text(it.head.text, `x="${r1(cx + w / 2)}" y="${r1(top + HEAD_H / 2 + HEAD_FS * 0.36)}" font-size="${HEAD_FS}" font-weight="${W8.label ?? 700}" fill="${col.fg}" text-anchor="middle"`)
+          + lines(it.lines, r1(cx + w + HEAD_GAP), y);
+        y += it.lines.length * FOOT_LH + FOOT_GAP;
+      }
     }
   }
 
