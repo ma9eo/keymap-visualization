@@ -288,11 +288,17 @@ function palette(t, data) {
 // 注釈マーカーが付くキー。短縮表記の正式名は注釈ではなく短縮表記の一覧に載せるので、マーカーは付かない（第8.2節）
 const hasMark = (k) => !!k.note;
 // 1キーに複数ある識別子の縦のずれ（第6.4節）。基本入力の高さから下へ積み、キーの下端（マーカーがあればその上端）を越える分は上へ積む
-const identDy = (k, n, s, opts, L) => {
-  const limit = hasMark(k, opts) ? KS - markInset(L) - 1 : KS;
+// 積む位置がほかのキーの注釈マーカーと重なるときは、その位置を飛ばす（第10.5節）。marks は markRects の結果、w は識別子の幅
+const identDy = (k, n, s, w, L, marks) => {
+  const limit = hasMark(k) ? KS - markInset(L) - 1 : KS;
   const down = Math.max(0, Math.floor((limit - (L.baseY + s / 2)) / (s + 2)));
+  const others = marks.filter((m) => m.k !== k);
+  const free = (dy) => { const r = rotRect(k, [identX(k, w), k.y + IN + L.baseY - s / 2 + dy, w, s]); return others.every((m) => !hit(r, m.r)); };
+  for (let i = 0, j = 0; i < 1000; i++) { const dy = (i <= down ? i : -(i - down)) * (s + 2); if (free(dy) && j++ === n) return dy; }
   return (n <= down ? n : -(n - down)) * (s + 2);
 };
+// 注釈マーカーの矩形（回転したキーでは回転後の外接矩形）。識別子を積む位置を決めるときに避ける
+const markRects = (keys, L) => keys.filter(hasMark).map((k) => { const [mx, my] = markPos(k, L); return { k, r: rotRect(k, [mx - 1, my - 1, L.mark + 2, L.mark + 2]) }; });
 const keyBox = (k) => [k.x + IN, k.y + IN, KS, KS];
 function isHorizontalPair(a, b) {
   if (a.rot || b.rot) return false;
@@ -459,10 +465,10 @@ function placeCombos(data, L, iconSize, opts = {}) {
   };
   // 識別子（右枠線上、基本入力の高さ）も避ける対象にする
   const identRects = [];
-  const cnt = {};
+  const cnt = {}, marks = markRects(data.keys, L);
   for (const c of idents) for (const k of c.members) {
     const n = (cnt[k.id] = (cnt[k.id] || 0) + 1) - 1, sz = L.fs.label + 4, w = identWidth((data.combos || []).length > 26 ? 'AA' : 'A', L.fs.label);
-    identRects.push(rotRect(k, [identX(k, w), k.y + IN + L.baseY - sz / 2 + identDy(k, n, sz, opts, L), w, sz]));
+    identRects.push(rotRect(k, [identX(k, w), k.y + IN + L.baseY - sz / 2 + identDy(k, n, sz, w, L, marks), w, sz]));
   }
   // 配置済みのComboラベルも避ける（第6.1節）
   const placedRects = [];
@@ -821,13 +827,14 @@ function render(data, theme, icons, best, i) {
     out += (col.defs || '') + `<rect x="${r1(OX + x)}" y="${r1(OY + y)}" width="${r1(w)}" height="${r1(h)}" rx="${r1(h * COMBO_R)}" fill="${col.bg}"/>`
       + withIcon(comboIcon(c), c.draw.text, OX + x + w / 2, OY + y + h / 2, fsz, `font-size="${r1(fsz)}" font-weight="${W8.label ?? 700}" fill="${col.fg}"`, col.fg);
   }
-  const stack = {};
+  // 識別子を積む位置は、placeCombos と同じく、最も広い識別子の幅で注釈マーカーとの重なりを判定して決める
+  const stack = {}, marks = markRects(data.keys, L), wMax = identWidth((data.combos || []).length > 26 ? 'AA' : 'A', L.fs.label);
   for (const c of idents) {
     const col = comboColor(c);
     out += col.defs || '';
     for (const k of c.members) {
       const n = (stack[k.id] = (stack[k.id] || 0) + 1) - 1;
-      const s = L.fs.label + 4, w = identWidth(c.letter, L.fs.label), x = OX + identX(k, w), y = OY + k.y + IN + L.baseY - s / 2 + identDy(k, n, s, best.opts, L);
+      const s = L.fs.label + 4, w = identWidth(c.letter, L.fs.label), x = OX + identX(k, w), y = OY + k.y + IN + L.baseY - s / 2 + identDy(k, n, s, wMax, L, marks);
       const id = `<rect x="${r1(x)}" y="${r1(y)}" width="${r1(w)}" height="${r1(s)}" rx="${r1(s * COMBO_R)}" fill="${col.bg}"/>` + text(c.letter, `x="${r1(x + w / 2)}" y="${r1(y + s / 2 + L.fs.label * 0.36)}" font-size="${r1(L.fs.label)}" font-weight="${W8.label ?? 700}" fill="${col.fg}" text-anchor="middle"`);
       // 回転したキーでは、キーと同じ中心・角度で回す（第6.2節）
       out += k.rot ? `<g transform="rotate(${k.rot},${r1(OX + (k.rx ?? k.x + PITCH / 2))},${r1(OY + (k.ry ?? k.y + PITCH / 2))})">${id}</g>` : id;
