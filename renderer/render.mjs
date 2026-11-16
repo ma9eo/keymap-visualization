@@ -94,6 +94,7 @@ function validate(d) {
   const errs = [];
   if (!d.meta?.keyboard) errs.push('meta.keyboard がありません');
   if (!d.meta?.os) errs.push('meta.os がありません');
+  if (typeof d.meta?.split !== 'boolean') errs.push('meta.split がありません。分割型なら true、一体型なら false にしてください（第10.0節）');
   if (!d.meta?.source?.repo || !d.meta?.source?.commit) errs.push('meta.source（repo と commit）がありません');
   if (!Array.isArray(d.layers)) errs.push('layers がありません');
   else if (d.layers.filter((l) => l.show !== false).length > 6) errs.push('この図に表示する追加レイヤーは6つまでです。図を分け、ほかの図のレイヤーには show: false を付けてください（第3.2節）');
@@ -330,26 +331,25 @@ function placeCombos(data, L, iconSize, opts = {}) {
   }
   for (const c of fallback) idents.push({ ...c, members: [c.a, c.b], fallback: true });
   // 識別子は英大文字。左半分→右半分、上の行→下の行、左→右（第6.2節・第8.2節）
-  const { order, cmp } = keyOrder(data.keys);
+  const { order, cmp } = keyOrder();
   idents.sort((p, q) => cmp(order(p.members.slice().sort((x, y) => cmp(order(x), order(y)))[0]), order(q.members.slice().sort((x, y) => cmp(order(x), order(y)))[0])));
   idents.forEach((c, i) => { c.letter = String.fromCharCode(65 + i); });
   return { labels: labels.filter((c) => c.rect), idents, failed: fallback.length };
 }
 
-// 左右分割型なら、最も広い横の隙間で左右を分ける
-// 採番の順：左半分→右半分、上の行→下の行、左→右（第6.2節・第8.2節）
-function keyOrder(keys) {
-  const split = splitX(keys);
-  const order = (k) => [k.x + KS / 2 < split ? 0 : 1, Math.round(k.y / PITCH), k.x];
+// 採番の順：左半分→右半分、上の行→下の行、左→右（第6.2節・第8.2節）。左右は compressSplit が _side に入れる
+function keyOrder() {
+  const order = (k) => [k._side, Math.round(k.y / PITCH), k.x];
   const cmp = (p, q) => { for (let i = 0; i < 3; i++) if (p[i] !== q[i]) return p[i] - q[i]; return 0; };
   return { order, cmp };
 }
 
+// 分割型の左右の境目。キーの横位置が最も大きく離れているところで分ける（第10.10節）
 function splitX(keys) {
   const xs = [...new Set(keys.map((k) => k.x))].sort((a, b) => a - b);
   let best = { gap: 0, at: Infinity };
   for (let i = 1; i < xs.length; i++) if (xs[i] - xs[i - 1] > best.gap) best = { gap: xs[i] - xs[i - 1], at: (xs[i] + xs[i - 1] + KS) / 2 };
-  return best.gap > PITCH * 2 ? best.at : Infinity;
+  return best;
 }
 
 // 分割型は、左右の間隔を実際の距離ではなく SPLIT_GAP に詰める（第10.1節）。左右それぞれの中の配置は変えない
@@ -359,15 +359,16 @@ function keyCorners(k) {
   const cx = k.rx ?? k.x + PITCH / 2, cy = k.ry ?? k.y + PITCH / 2, a = (k.rot * Math.PI) / 180;
   return pts.map(([x, y]) => [cx + (x - cx) * Math.cos(a) - (y - cy) * Math.sin(a), cy + (x - cx) * Math.sin(a) + (y - cy) * Math.cos(a)]);
 }
+// 分割型かどうかは入力の meta.split に従い、キーの間隔から推定しない（第10.0節）。一体型は間隔を詰めず、採番も全体を1つとして扱う
 function compressSplit(data) {
-  const split = splitX(data.keys);
-  if (split === Infinity) return data;
+  if (!data.meta.split) return { ...data, keys: data.keys.map((k) => ({ ...k, _side: 0 })) };
+  const { gap, at: split } = splitX(data.keys);
+  if (gap <= PITCH) fail('meta.split が true ですが、左右のキーの間が空いていません。左半分と右半分が横方向に重ならず、間が1u以上空く座標にしてください（第10.10節）');
   const right = (k) => k.x + KS / 2 >= split;
   const leftEdge = Math.max(...data.keys.filter((k) => !right(k)).flatMap((k) => keyCorners(k).map((p) => p[0])));
   const rightEdge = Math.min(...data.keys.filter(right).flatMap((k) => keyCorners(k).map((p) => p[0])));
-  const dx = rightEdge - leftEdge - (SPLIT_GAP - (PITCH - KS));
-  if (dx <= 0) return data;
-  const keys = data.keys.map((k) => (right(k) ? { ...k, x: k.x - dx, ...(k.rx !== undefined ? { rx: k.rx - dx } : {}) } : k));
+  const dx = Math.max(0, rightEdge - leftEdge - (SPLIT_GAP - (PITCH - KS)));
+  const keys = data.keys.map((k) => (right(k) ? { ...k, _side: 1, x: k.x - dx, ...(k.rx !== undefined ? { rx: k.rx - dx } : {}) } : { ...k, _side: 0 }));
   return { ...data, keys };
 }
 
@@ -413,7 +414,7 @@ function render(data, theme, icons) {
   const M = 70, HEAD = 190, KZ = L.k;
   const OX = -minX, OY = -minY;
   // 注釈（第8章）：キーの注釈と、短縮表記を使ったセルの正式名を1つの番号にまとめる。キーに属さない注釈は番号なしで末尾に置く
-  const { order, cmp } = keyOrder(data.keys);
+  const { order, cmp } = keyOrder();
   const end = (t) => (/[。.．!?！？]$/.test(t) ? t : t + words.stop.trim());
   const notes = data.keys
     .map((k) => {

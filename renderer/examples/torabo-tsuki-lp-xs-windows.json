@@ -3,6 +3,7 @@
   "meta": {
     "keyboard": "torabo-tsuki LP（XS）",
     "os": "Windows",
+    "split": true,
     "language": "ja",
     "hostLayout": "US",
     "source": {
