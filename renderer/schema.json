@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/ma9eo/keymap-visualization/renderer/schema.json",
   "title": "キーマップ可視化 中間データ",
-  "description": "キーマップ可視化 デザインルール v0.3 の中間データ。キーマップを解析し、入力項目を確定させた結果を表す。座標は 1u = 100 の単位で表す。",
+  "description": "キーマップ可視化 デザインルール v0.4 の中間データ。キーマップを解析し、入力項目を確定させた結果を表す。座標は 1u = 100 の単位で表す。",
   "type": "object",
   "required": ["meta", "layers", "keys"],
   "additionalProperties": false,
