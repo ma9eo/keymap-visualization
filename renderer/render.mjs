@@ -245,7 +245,7 @@ function palette(t, data) {
     neutral: readable(t.neutral, '#ffffff', '#000000'),
     op: readable(mix(t.text.base, surface, 0.62), keyBg, t.text.base),
     groundBg,
-    sub: t.text.sub,
+    sub: readable(t.text.sub, groundBg, t.text.base), // ヘッダの補足文字も、地の暗い側に対して確保する
     base: t.text.base,
   };
 }
