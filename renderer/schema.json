@@ -141,7 +141,7 @@
           "kind": {
             "type": "string",
             "enum": ["base", "layer", "go"],
-            "description": "base：レイヤーに関係なく有効／layer：そのレイヤーにいる間だけ有効／go：そのレイヤーへ行く（第3.1節）"
+            "description": "base：Baseで有効、またはレイヤーに関係なく有効（Baseだけに限る場合は note か comboNote に書く）／layer：そのレイヤーにいる間だけ有効／go：そのレイヤーへ行く（第3.1節）"
           },
           "layer": { "oneOf": [{ "type": "string" }, { "type": "array", "minItems": 2, "items": { "type": "string" } }], "description": "kind が layer・go のときのレイヤーの id。layer で複数の追加レイヤーで有効な場合は配列にする（go は1つだけ）" },
           "via": { "type": "string", "enum": ["hold", "toggle", "to", "one-shot"], "description": "kind が go のときの切り替える操作（第6章）。省略時は hold。hold 以外はラベルに操作アイコンを付ける" }
