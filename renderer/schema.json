@@ -83,7 +83,8 @@
                   "required": ["text"],
                   "additionalProperties": false,
                   "properties": {
-                    "text": { "type": "string", "description": "正式名" },
+                    "text": { "type": "string", "description": "正式名。出力がなく Hold だけのセルは空文字にする（セルは描かず、Hold の帯だけを描く）" },
+                    "tentative": { "type": "boolean", "description": "意味を確かめていない仮の名前（第9.4節）。描画プログラムが「?」を付ける" },
                     "icon": { "const": "one-shot", "description": "ワンショット修飾キー（第4.7節）" },
                     "short": { "type": "string", "description": "短縮表記。セルに収まらないときに描画プログラムが使い、正式名を短縮表記の一覧に載せる（第10.4節）。記号1文字だけにはしない" },
                     "hold": { "type": "string", "description": "このレイヤーでの Hold の機能名（第4.5節）。下部に、このレイヤーの淡い色の帯で描く。Base と同じ Hold は書かない" }
@@ -92,7 +93,13 @@
               ]
             }
           },
-          "hold": { "type": "string", "description": "Hold の機能名（レイヤー切り替え以外）" },
+          "hold": {
+            "description": "Hold の機能名（レイヤー切り替え以外）。収まらない場合の短縮表記を付けるときは { text, short }",
+            "oneOf": [
+              { "type": "string" },
+              { "type": "object", "required": ["text"], "additionalProperties": false, "properties": { "text": { "type": "string" }, "short": { "type": "string", "description": "短縮表記（第10.4節）。正式名は短縮表記の一覧に載せる" }, "tentative": { "type": "boolean", "description": "意味を確かめていない仮の名前（第9.4節）" } } }
+            ]
+          },
           "taps": {
             "type": "array",
             "description": "Tap Dance（レイヤー切り替え以外）",
@@ -102,7 +109,9 @@
               "additionalProperties": false,
               "properties": {
                 "icon": { "type": "string", "enum": ["tap-2", "tap-3"] },
-                "text": { "type": "string" }
+                "text": { "type": "string" },
+                "short": { "type": "string", "description": "短縮表記（第10.4節）" },
+                "tentative": { "type": "boolean", "description": "意味を確かめていない仮の名前（第9.4節）" }
               }
             }
           },
@@ -127,6 +136,7 @@
           "keys": { "type": "array", "minItems": 2, "items": { "type": "string" }, "description": "構成キーの id" },
           "text": { "type": "string", "description": "機能名。レイヤー切り替え（go）では切り替え先レイヤーの名前か、切り替える目的" },
           "short": { "type": "string", "description": "短縮表記。ラベルが収まらないときに描画プログラムが使い、正式名をCombo欄に載せる（第6.1節・第10.4節）。記号1文字だけにはしない" },
+          "tentative": { "type": "boolean", "description": "意味を確かめていない仮の名前（第9.4節）" },
           "note": { "type": "string", "description": "Comboの補足（有効条件など）。Combo欄に載せる（第6章）。レイヤーに触れるときは [[id]]（行く）・[[id:in]]（いる間）と書く" },
           "kind": {
             "type": "string",
