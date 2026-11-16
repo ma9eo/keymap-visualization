@@ -18,7 +18,7 @@
         "split": { "type": "boolean", "description": "分割型なら true、一体型なら false（第10.0節）。キーの間隔からは推定しない。true のときは、左半分と右半分が横方向に重ならず、間が1u以上空く座標で keys を書く（第10.10節）" },
         "os": { "type": "string", "description": "対象OS" },
         "language": { "type": "string", "enum": ["ja", "en"], "default": "ja", "description": "表示言語" },
-        "hostLayout": { "type": "string", "description": "ホストのキーボード配列（US・JISなど）。記号の解釈に使った値を記録する。図には表示しない" },
+        "hostLayout": { "type": "string", "description": "ホストのキーボード配列（US・JISなど）。記号の解釈に使った値を記録する。キーマップビジュアルには表示しない" },
         "source": {
           "type": "object",
           "required": ["repo", "commit"],
@@ -29,15 +29,15 @@
             "path": { "type": "string", "description": "キーマップのファイルパス" }
           }
         },
-        "osSource": { "type": "string", "description": "対象OSをキーマップの中身から推定した場合の根拠（第10.0節）。図には表示しない" },
-        "layoutSource": { "type": "string", "description": "物理配置の根拠。キーの座標を決めた資料（設計データ・配列定義・写真）と決め方を書く（第9.0節）。図には表示しない" },
+        "osSource": { "type": "string", "description": "対象OSをキーマップの中身から推定した場合の根拠（第10.0節）。キーマップビジュアルには表示しない" },
+        "layoutSource": { "type": "string", "description": "物理配置の根拠。キーの座標を決めた資料（設計データ・配列定義・写真）と決め方を書く（第9.0節）。キーマップビジュアルには表示しない" },
         "spec": { "type": "string", "description": "本仕様のバージョン" },
         "title": { "type": "string", "description": "見出し。省略時は「キーボード名 キーマップ — OS」" }
       }
     },
     "layers": {
       "type": "array",
-      "description": "追加レイヤー。並び順が凡例の順で、表示スロットの割り当てにも使う（第3.2節）。図を分ける場合は、すべての図に全レイヤーを同じ順で書き、この図に表示しないレイヤーには show: false を付ける。表示するレイヤーは6つまで",
+      "description": "追加レイヤー。並び順が凡例の順で、表示スロットの割り当てにも使う（第3.2節）。キーマップビジュアルを分ける場合は、すべてのキーマップビジュアルに全レイヤーを同じ順で書き、このキーマップビジュアルに表示しないレイヤーには show: false を付ける。表示するレイヤーは6つまで",
       "items": {
         "type": "object",
         "required": ["id", "name"],
@@ -46,7 +46,7 @@
           "id": { "type": "string", "description": "データ内で参照するための識別子" },
           "name": { "type": "string", "description": "表示名（第3.1節）" },
           "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$", "description": "レイヤー色。省略時はテーマのレイヤー色を順に使う" },
-          "show": { "type": "boolean", "default": true, "description": "false にすると、この図ではセルを持たず、凡例にも載せない。レイヤー切り替えやComboの色と名前には使う（第3.2節）" }
+          "show": { "type": "boolean", "default": true, "description": "false にすると、このキーマップビジュアルではセルを持たず、凡例にも載せない。レイヤー切り替えやComboの色と名前には使う（第3.2節）" }
         }
       }
     },

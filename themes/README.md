@@ -2,7 +2,7 @@
 
 キーマップ可視化 デザインルール 第10.9節「出力形式とテーマ」で定める既定テーマです。テーマで変えてよいのはテーマ項目の値だけで、配置・領域構成・文字の大きさの順・色の意味は本仕様で固定されています。
 
-- 見本の図（`samples/clay.svg`）は、`renderer/examples/torabo-tsuki-lp-xs-windows.json` を描画プログラム（`renderer/`）で描いたものです。
+- 見本のキーマップビジュアル（`samples/clay.svg`）は、`renderer/examples/torabo-tsuki-lp-xs-windows.json` を描画プログラム（`renderer/`）で描いたものです。
 - 操作アイコンは `icons/` のSVGを使っています（第4.1節）。
 - 見本のSVGはフォントを Google Fonts から読み込みます。オフラインのときや、画像（`<img>`）として埋め込んだときは、代わりのフォントで表示されます。
 

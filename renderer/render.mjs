@@ -3,10 +3,10 @@
 // 中間データ（JSON）とテーマ（JSON）から SVG を描く。外部ライブラリは使わない。
 //
 //   node renderer/render.mjs <中間データ.json> [--theme <名前|パス>] [-o <出力.svg>]
-//   node renderer/render.mjs <図1.json> <図2.json> … [--theme <名前|パス>] [-o <出力先ディレクトリ>]
+//   node renderer/render.mjs <キーマップビジュアル1.json> <キーマップビジュアル2.json> … [--theme <名前|パス>] [-o <出力先ディレクトリ>]
 //
 // --theme を省略すると既定テーマ（themes/clay.json）を使う。
-// 複数の中間データは図の組（OS別の図など）として扱い、表示スロットと寸法を組全体で揃える（第2章）。
+// 複数の中間データはキーマップビジュアルの組（OS別のキーマップビジュアルなど）として扱い、表示スロットと寸法を組全体で揃える（第2章）。
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -78,7 +78,7 @@ function wrap(s, max, fs, measure = textWidth) {
 // 記号1文字だけの短縮表記は、キーの出力と取り違えるので使わない（第10.4節）
 const oneSymbol = (t) => typeof t === 'string' && /^[^\p{L}\p{N}]$/u.test(t.trim());
 function fail(msg) { console.error(`エラー: ${msg}`); process.exit(1); }
-// 図の組では、どの図の警告かが分かるようにファイル名を付ける
+// キーマップビジュアルの組では、どのキーマップビジュアルの警告かが分かるようにファイル名を付ける
 const say = (d, msg) => console.error(d?._name ? `${d._name}: ${msg}` : msg);
 
 function parseArgs(argv) {
@@ -121,7 +121,7 @@ function validate(d, name = '') {
   if (typeof d.meta?.split !== 'boolean') errs.push('meta.split がありません。分割型なら true、一体型なら false にしてください（第10.0節）');
   if (!d.meta?.source?.repo || !d.meta?.source?.commit) errs.push('meta.source（repo と commit）がありません');
   if (!Array.isArray(d.layers)) errs.push('layers がありません');
-  else if (d.layers.filter((l) => l.show !== false).length > 6) errs.push('この図に表示する追加レイヤーは6つまでです。図を分け、ほかの図のレイヤーには show: false を付けてください（第3.2節）');
+  else if (d.layers.filter((l) => l.show !== false).length > 6) errs.push('このキーマップビジュアルに表示する追加レイヤーは6つまでです。キーマップビジュアルを分け、ほかのキーマップビジュアルのレイヤーには show: false を付けてください（第3.2節）');
   if (!Array.isArray(d.keys) || !d.keys.length) errs.push('keys がありません');
   const layerIds = new Set((d.layers || []).map((l) => l.id));
   const keyIds = new Set();
@@ -131,7 +131,7 @@ function validate(d, name = '') {
     keyIds.add(k.id);
     for (const [l, v] of Object.entries(k.cells || {})) {
       if (!layerIds.has(l)) errs.push(`${k.id}: 未定義のレイヤー ${l}`);
-      else if (d.layers.find((x) => x.id === l).show === false) errs.push(`${k.id}: レイヤー ${l} はこの図に表示しない（show: false）ので、セルを書けません`);
+      else if (d.layers.find((x) => x.id === l).show === false) errs.push(`${k.id}: レイヤー ${l} はこのキーマップビジュアルに表示しない（show: false）ので、セルを書けません`);
       if (typeof v !== 'string' && typeof v?.text !== 'string') errs.push(`${k.id}: レイヤー ${l} のセルは文字列か { text, short } にしてください`);
       if (v?.hold !== undefined && typeof v.hold !== 'string') errs.push(`${k.id}: レイヤー ${l} のセルの hold は機能名（文字列）にしてください`);
       if (oneSymbol(v?.short)) errs.push(`${k.id}: レイヤー ${l} の短縮表記「${v.short}」は記号1文字だけです。キーの出力と取り違えるので使えません（第10.4節）`);
@@ -174,7 +174,7 @@ function layout(theme, data, k = 1) {
   const fs = { base: dm.baseText * KS / k, cell: dm.cellText * KS / k, op: dm.opText * KS / k, label: dm.labelText * KS / k };
   const rowY = [...Array(rows)].map((_, i) => PAD + i * (cellH + COL_GAP));
   const topEnd = rows ? rowY[rows - 1] + cellH : PAD;
-  // 下部の行数は、全キーの中で最も多い操作表示の数（第10.2節）。図の組では組全体で揃える（assignSlots が決める）
+  // 下部の行数は、全キーの中で最も多い操作表示の数（第10.2節）。キーマップビジュアルの組では組全体で揃える（assignSlots が決める）
   const opLines = data._opLines;
   const lineH = Math.max(barH, fs.op * 1.35);
   const opY = [...Array(opLines)].map((_, i) => KS - PAD - lineH * (opLines - i) + lineH / 2); // 各行の中心
@@ -213,11 +213,11 @@ function keyShape(t) {
 }
 
 // ---------------------------------------------------------------- 配色（第3.1節「色の濃淡の意味」）
-// この図に表示する追加レイヤー（第3.2節）。show: false のレイヤーはセルと凡例を持たない
+// このキーマップビジュアルに表示する追加レイヤー（第3.2節）。show: false のレイヤーはセルと凡例を持たない
 const shown = (data) => data.layers.filter((l) => l.show !== false);
 
 function palette(t, data) {
-  // 図を分けても同じレイヤーは同じ色にするため、全レイヤーの並び順で色を割り当てる。テーマの色が足りなければ color の指定を求める
+  // キーマップビジュアルを分けても同じレイヤーは同じ色にするため、全レイヤーの並び順で色を割り当てる。テーマの色が足りなければ color の指定を求める
   const auto = data.layers.filter((l) => !l.color);
   if (data.layers.length > t.layers.length && auto.length) fail(`追加レイヤーが ${data.layers.length} つあり、テーマのレイヤー色（${t.layers.length} 色）より多いため、color を指定してください: ${auto.map((l) => l.id).join(', ')}`);
   const surface = t.key.surface;
@@ -454,7 +454,7 @@ function compressSplit(data) {
 
 // 表示スロットの割り当て（第3.2節）。凡例の順に、同じキーに出力を持つレイヤーが使っていない最も若いスロットを選ぶ
 // 同じキーに同時に出力を持たないレイヤー同士はスロットを共有する。各レイヤーの位置は全キーで同じになる
-// 図の組（第2章）では、組のすべての図を合わせて判定し、どの図も同じ割り当てと同じ下部の行数にする
+// キーマップビジュアルの組（第2章）では、組のすべてのキーマップビジュアルを合わせて判定し、どのキーマップビジュアルも同じ割り当てと同じ下部の行数にする
 function assignSlots(datas) {
   const ids = datas[0].layers.map((l) => l.id).filter((id) => datas.some((d) => shown(d).some((l) => l.id === id)));
   const co = Object.fromEntries(ids.map((id) => [id, new Set()]));
@@ -468,7 +468,7 @@ function assignSlots(datas) {
 }
 
 // ---------------------------------------------------------------- 描画
-// 第10.4節の手段を試して、全キー共通の寸法と表記を決める。図の組では、組のすべての図が収まる共通の寸法を選ぶ
+// 第10.4節の手段を試して、全キー共通の寸法と表記を決める。キーマップビジュアルの組では、組のすべてのキーマップビジュアルが収まる共通の寸法を選ぶ
 function fit(theme, datas) {
   // 第10.4節の順で試す：1. 文字縮小（75%まで）→ 2. キー拡大 → 3. 短縮表記 → 4. 50%までの縮小。Comboラベル・セルの文字・基本入力を一緒に判定する
   // 全て収まる最初の組み合わせを選ぶ。どれでも残る場合は、収まらない数が最も少ない組み合わせを選び、数が同じなら基本入力の高さの不足が小さいほうを選ぶ
@@ -507,7 +507,7 @@ function holdsToNotes(data, words) {
   return { ...data, keys };
 }
 
-// fit で決めた寸法と表記で、図の組の i 枚目を描く
+// fit で決めた寸法と表記で、キーマップビジュアルの組の i 枚目を描く
 function render(data, theme, icons, best, i) {
   const P = palette(theme, data);
   const W8 = theme.dims.weights || {};
@@ -735,7 +735,7 @@ ${fontImport}<defs>${keyDefs(theme)}</defs><rect width="100%" height="100%" fill
 }
 
 // ---------------------------------------------------------------- 実行
-// 図の組は、キーの配置・分割型かどうか・レイヤーの並びと色が同じでなければならない（第2章）
+// キーマップビジュアルの組は、キーの配置・分割型かどうか・レイヤーの並びと色が同じでなければならない（第2章）
 function checkGroup(datas, names) {
   const errs = [], [a] = datas;
   const keyOf = (k) => JSON.stringify([k.x, k.y, k.rot ?? 0, k.rx ?? null, k.ry ?? null]);
@@ -748,12 +748,12 @@ function checkGroup(datas, names) {
     for (const [id, v] of ka) if (kd.get(id) !== v) errs.push(`${n}: キー ${id} が ${names[0]} にあり、${kd.has(id) ? '位置や回転が違います' : n + ' にありません'}`);
     for (const id of kd.keys()) if (!ka.has(id)) errs.push(`${n}: キー ${id} が ${names[0]} にありません`);
   });
-  if (errs.length) fail('図の組の中間データが揃っていません（第2章）\n- ' + errs.join('\n- '));
+  if (errs.length) fail('キーマップビジュアルの組の中間データが揃っていません（第2章）\n- ' + errs.join('\n- '));
 }
 
 const args = parseArgs(process.argv.slice(2));
 if (args.help || !args.data.length) {
-  console.log('使い方: node renderer/render.mjs <中間データ.json> [--theme <名前|パス>] [-o <出力.svg>]\n       node renderer/render.mjs <図1.json> <図2.json> … [--theme <名前|パス>] [-o <出力先ディレクトリ>]');
+  console.log('使い方: node renderer/render.mjs <中間データ.json> [--theme <名前|パス>] [-o <出力.svg>]\n       node renderer/render.mjs <キーマップビジュアル1.json> <キーマップビジュアル2.json> … [--theme <名前|パス>] [-o <出力先ディレクトリ>]');
   process.exit(args.help ? 0 : 1);
 }
 const group = args.data.length > 1, names = args.data.map((p) => path.basename(p));
@@ -774,18 +774,18 @@ datas = datas.map(compressSplit);
 const theme = loadTheme(args.theme), icons = loadIcons();
 assignSlots(datas);
 let best = fit(theme, datas);
-// 追加レイヤー内の Hold を下部に描くと収まらない場合は、図（図の組ではすべての図）の Hold を注釈にまとめる（第4.5節）。表し方を混ぜない
+// 追加レイヤー内の Hold を下部に描くと収まらない場合は、キーマップビジュアル（キーマップビジュアルの組ではすべてのキーマップビジュアル）の Hold を注釈にまとめる（第4.5節）。表し方を混ぜない
 if (best.failed && datas.some((d) => d.keys.some((k) => Object.values(k.cells || {}).some((v) => v?.hold)))) {
   const alt = datas.map((d) => holdsToNotes(d, WORDS[d.meta.language] || WORDS.ja));
   assignSlots(alt);
   const b2 = fit(theme, alt);
-  if (b2.failed < best.failed) { datas = alt; best = b2; console.error(`情報: 追加レイヤーの Hold を下部に描くと収まらないため、${group ? 'この図の組' : 'この図'}ではすべて注釈にまとめました（第4.5節）`); }
+  if (b2.failed < best.failed) { datas = alt; best = b2; console.error(`情報: 追加レイヤーの Hold を下部に描くと収まらないため、${group ? 'このキーマップビジュアルの組' : 'このキーマップビジュアル'}ではすべて注釈にまとめました（第4.5節）`); }
 }
 const svgs = datas.map((d, i) => render(d, theme, icons, best, i));
 if (!group) {
   if (args.out) fs.writeFileSync(args.out, svgs[0]); else process.stdout.write(svgs[0]);
 } else {
-  // 図の組は、出力先ディレクトリ（省略時は各中間データと同じ場所）に、中間データと同じ名前の .svg で書く
+  // キーマップビジュアルの組は、出力先ディレクトリ（省略時は各中間データと同じ場所）に、中間データと同じ名前の .svg で書く
   if (args.out) fs.mkdirSync(args.out, { recursive: true });
   args.data.forEach((p, i) => fs.writeFileSync(path.join(args.out || path.dirname(p), path.basename(p).replace(/\.json$/i, '') + '.svg'), svgs[i]));
 }
