@@ -139,7 +139,26 @@
               { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/switch" } }
             ]
           },
-          "note": { "type": "string", "description": "そのキーの注釈の本文（第8章）。番号とマーカーは描画プログラムが付ける。レイヤーに触れるときは [[id]]（行く）・[[id:in]]（いる間）と書く" }
+          "note": {
+            "description": "そのキーの注釈（第8章）。番号とマーカーは描画プログラムが付ける。レイヤーに触れるときは [[id]]（行く）・[[id:in]]（いる間）と書く",
+            "oneOf": [
+              { "type": "string", "description": "注釈の本文" },
+              {
+                "type": "object",
+                "required": ["text", "table"],
+                "additionalProperties": false,
+                "description": "直前のキーで出力が変わるキーの、本文と対応表（第8.2節）",
+                "properties": {
+                  "text": { "type": "string", "description": "注釈の本文" },
+                  "table": {
+                    "type": "array",
+                    "description": "［直前のキー, 出力］の並び。直前のキーが複数なら配列で書く",
+                    "items": { "type": "array", "minItems": 2, "maxItems": 2, "prefixItems": [{ "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }] }, { "type": "string" }] }
+                  }
+                }
+              }
+            ]
+          }
         }
       }
     },
