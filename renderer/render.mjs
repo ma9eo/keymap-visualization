@@ -22,7 +22,8 @@ const IN = (PITCH - KS) / 2;
 const PAD = 6; // キー内側の余白
 const COL_GAP = 3; // セル同士の間隔
 const ENLARGE = [1, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.35, 1.4, 1.45, 1.5]; // 第10.4節：キー拡大の段階（最大1.5倍）
-const SHRINK = [0.95, 0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.6, 0.55, 0.5]; // 第10.4節：文字縮小の段階（読める範囲として50%まで）
+const SHRINK = [0.95, 0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.6, 0.55, 0.5]; // 第10.4節：文字縮小の段階（下限50%）
+const SHRINK_LIGHT = SHRINK.filter((f) => f >= 0.75), SHRINK_DEEP = SHRINK.filter((f) => f < 0.75); // 75%までの縮小と、最後の手段としての50%までの縮小
 const COMBO_R = 0.5; // Comboのラベルと識別子の角丸の半径（高さに対する比）。両者で揃え、両端を半円にする（第6章）
 const LABEL_MIN_W = 3; // 境界上のComboラベルの最小幅（ラベルの文字の大きさに対する比）
 const LABEL_PAD = 0.9; // 境界上のComboラベルの左右の余白の合計（ラベルの文字の大きさに対する比）
@@ -319,10 +320,15 @@ function baseFit(k, L) {
 }
 const baseSize = (k, L) => baseFit(k, L).fs;
 
-// 試す表記：正式名（文字縮小を含む）→ 短縮表記（文字縮小を含む）（第10.4節）
+// 試す表記（第10.4節）：正式名（75%まで縮小）→ 短縮表記（75%まで縮小）→ 最後の手段として、短縮表記・正式名の順に50%まで縮小
+// 短縮表記があるのに、正式名を読めない大きさまで縮めて描くことを避ける
 function variants(c, opts) {
-  const fs = [1, ...(opts.shrink ? SHRINK : [])], v = fs.map((f) => ({ text: c.text, f }));
-  if (opts.short && c.short) v.push(...fs.map((f) => ({ text: c.short, f, short: true })));
+  const light = [1, ...SHRINK_LIGHT], v = light.map((f) => ({ text: c.text, f }));
+  if (opts.short && c.short) v.push(...light.map((f) => ({ text: c.short, f, short: true })));
+  if (opts.deep) {
+    if (c.short) v.push(...SHRINK_DEEP.map((f) => ({ text: c.short, f, short: true })));
+    v.push(...SHRINK_DEEP.map((f) => ({ text: c.text, f })));
+  }
   return v;
 }
 
@@ -458,11 +464,11 @@ function assignSlots(datas) {
 // ---------------------------------------------------------------- 描画
 // 第10.4節の手段を試して、全キー共通の寸法と表記を決める。図の組では、組のすべての図が収まる共通の寸法を選ぶ
 function fit(theme, datas) {
-  // 第10.4節の順で試す：1. 文字縮小 → 2. キー拡大 → 3. 短縮表記。Comboラベル・セルの文字・基本入力を一緒に判定する
+  // 第10.4節の順で試す：1. 文字縮小（75%まで）→ 2. キー拡大 → 3. 短縮表記 → 4. 50%までの縮小。Comboラベル・セルの文字・基本入力を一緒に判定する
   // 全て収まる最初の組み合わせを選ぶ。どれでも残る場合は、収まらない数が最も少ない組み合わせを選び、数が同じなら基本入力の高さの不足が小さいほうを選ぶ
   // 収まらないComboは識別子方式に、収まらないセルの文字と基本入力は下限の大きさで描いて警告する
   let best = null;
-  search: for (const opts of [{ shrink: true }, { shrink: true, short: true }]) {
+  search: for (const opts of [{}, { short: true }, { short: true, deep: true }]) {
     for (const k of ENLARGE) {
       const l = layout(theme, datas[0], k), isz = l.fs.op * 1.2;
       const per = datas.map((d) => ({ r: placeCombos(d, l, isz, opts), cs: placeCells(d, l, opts) }));
