@@ -36,7 +36,7 @@
     },
     "layers": {
       "type": "array",
-      "description": "追加レイヤー。並び順が表示スロットの順（第3.2節）。図を分ける場合は、すべての図に全レイヤーを同じ順で書き、この図に表示しないレイヤーには show: false を付ける。表示するレイヤーは6つまで",
+      "description": "追加レイヤー。並び順が凡例の順で、表示スロットの割り当てにも使う（第3.2節）。図を分ける場合は、すべての図に全レイヤーを同じ順で書き、この図に表示しないレイヤーには show: false を付ける。表示するレイヤーは6つまで",
       "items": {
         "type": "object",
         "required": ["id", "name"],
@@ -73,7 +73,7 @@
           },
           "cells": {
             "type": "object",
-            "description": "追加レイヤーの出力。キーはレイヤーの id。長い名前には短縮表記を、ワンショット修飾キーにはアイコンを添えられる",
+            "description": "追加レイヤーの出力。キーはレイヤーの id。長い名前には短縮表記を、ワンショット修飾キーにはアイコンを、そのレイヤーでの Hold には機能名を添えられる",
             "additionalProperties": {
               "oneOf": [
                 { "type": "string" },
@@ -84,7 +84,8 @@
                   "properties": {
                     "text": { "type": "string", "description": "正式名" },
                     "icon": { "const": "one-shot", "description": "ワンショット修飾キー（第4.7節）" },
-                    "short": { "type": "string", "description": "短縮表記。セルに収まらないときに描画プログラムが使い、正式名をそのキーの注釈に載せる（第10.4節）。記号1文字だけにはしない" }
+                    "short": { "type": "string", "description": "短縮表記。セルに収まらないときに描画プログラムが使い、正式名をそのキーの注釈に載せる（第10.4節）。記号1文字だけにはしない" },
+                    "hold": { "type": "string", "description": "このレイヤーでの Hold の機能名（第4.5節）。下部に、このレイヤーの淡い色の帯で描く。Base と同じ Hold は書かない" }
                   }
                 }
               ]
