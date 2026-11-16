@@ -29,6 +29,7 @@
             "path": { "type": "string", "description": "キーマップのファイルパス" }
           }
         },
+        "osSource": { "type": "string", "description": "対象OSをキーマップの中身から推定した場合の根拠（第10.0節）。図には表示しない" },
         "layoutSource": { "type": "string", "description": "物理配置の根拠。キーの座標を決めた資料（設計データ・配列定義・写真）と決め方を書く（第9.0節）。図には表示しない" },
         "spec": { "type": "string", "description": "本仕様のバージョン" },
         "title": { "type": "string", "description": "見出し。省略時は「キーボード名 キーマップ — OS」" }
