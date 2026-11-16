@@ -45,6 +45,8 @@ const lum = (h) => {
 };
 const contrast = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
 // 背景に対して min を満たすまで、色相を保ったまま toward へ寄せる
+// グラデーションの背景では、最も暗い色に対してコントラストを確保する（第10.9節）
+const darkest = (cs) => cs.reduce((a, b) => (lum(b) < lum(a) ? b : a));
 function readable(fg, bg, toward, min = 4.5) {
   let c = fg;
   for (let t = 1; contrast(c, bg) < min && t > 0; ) { t -= 0.05; c = mix(fg, toward, t); }
@@ -224,6 +226,9 @@ function palette(t, data) {
   const auto = data.layers.filter((l) => !l.color);
   if (data.layers.length > t.layers.length && auto.length) fail(`追加レイヤーが ${data.layers.length} つあり、テーマのレイヤー色（${t.layers.length} 色）より多いため、color を指定してください: ${auto.map((l) => l.id).join(', ')}`);
   const surface = t.key.surface;
+  // キーの面と地は、グラデーションのすべての色を背景の候補にする
+  const keyBg = darkest([surface, ...(t.key.face || [])]);
+  const groundBg = darkest(t.ground?.type === 'linear' ? [t.ground.from, t.ground.to] : [t.ground?.color || '#ffffff']);
   const C = {};
   data.layers.forEach((l, i) => {
     const col = l.color || t.layers[i % t.layers.length];
@@ -238,7 +243,8 @@ function palette(t, data) {
   return {
     C,
     neutral: readable(t.neutral, '#ffffff', '#000000'),
-    op: readable(mix(t.text.base, surface, 0.62), surface, t.text.base),
+    op: readable(mix(t.text.base, surface, 0.62), keyBg, t.text.base),
+    groundBg,
     sub: t.text.sub,
     base: t.text.base,
   };
@@ -423,7 +429,7 @@ function placeCombos(data, L, iconSize, opts = {}) {
 
 // 採番の順：左半分→右半分、上の行→下の行、左→右（第6.2節・第8.2節）。左右は compressSplit が _side に入れる
 function keyOrder() {
-  const order = (k) => [k._side, Math.round(k.y / PITCH), k.x];
+  const order = (k) => [k._side, k._row ?? Math.round(k.y / PITCH), k.x];
   const cmp = (p, q) => { for (let i = 0; i < 3; i++) if (p[i] !== q[i]) return p[i] - q[i]; return 0; };
   return { order, cmp };
 }
@@ -444,8 +450,41 @@ function keyCorners(k) {
   return pts.map(([x, y]) => [cx + (x - cx) * Math.cos(a) - (y - cy) * Math.sin(a), cy + (x - cx) * Math.sin(a) + (y - cy) * Math.cos(a)]);
 }
 // 分割型かどうかは入力の meta.split に従い、キーの間隔から推定しない（第10.0節）。一体型は間隔を詰めず、採番も全体を1つとして扱う
+// 採番に使う行（第8.2節）。縦位置を丸めるのではなく、隣の列との対応で決める
+// 列ごとに縦にずらした配列（小指列が下がっているなど）でも、同じ段のキーが同じ行になる
+function assignRows(keys) {
+  for (const side of new Set(keys.map((k) => k._side))) {
+    const ks = keys.filter((k) => k._side === side).sort((a, b) => a.x - b.x);
+    const cols = [];
+    for (const k of ks) { const c = cols.at(-1); if (c && k.x - c.x <= 25) c.keys.push(k); else cols.push({ x: k.x, keys: [k] }); }
+    cols.forEach((c) => c.keys.sort((a, b) => a.y - b.y));
+    // キーの数が最も多い列（同数なら左の列）を基準にし、上から 0, 1, 2… 行とする
+    const start = cols.reduce((b, c) => (c.keys.length > b.keys.length ? c : b), cols[0]);
+    start.keys.forEach((k, i) => { k._row = i; });
+    const done = [start];
+    // 縦の行数の差を数える。0.5u未満は同じ行、それ以上は少なくとも1行とし、親指キーのように1.5u前後離れていても1行とみなす
+    const steps = (dy) => { const a = Math.abs(dy); return Math.sign(dy) * (a < PITCH / 2 ? 0 : Math.max(1, Math.round(a / PITCH - 0.5))); };
+    // 2キー以上の列（キーの並ぶ列）を先に、基準の列から近い順に決める。1キーだけの列（親指キーなど）は最後に決め、基準には使わない
+    const dist = (c) => Math.abs(c.x - start.x);
+    const rest = cols.filter((x) => x !== start).sort((a, b) => (b.keys.length > 1) - (a.keys.length > 1) || dist(a) - dist(b));
+    for (const c of rest) {
+      const refs = done.filter((d) => d.keys.length > 1);
+      const ref = (refs.length ? refs : done).reduce((b, d) => (Math.abs(d.x - c.x) < Math.abs(b.x - c.x) ? d : b));
+      // キーの数が同じで、どの段のずれも1u未満なら、上から同じ順の行とみなす（ずらした列）
+      if (c.keys.length === ref.keys.length && c.keys.every((k, i) => Math.abs(k.y - ref.keys[i].y) < PITCH)) c.keys.forEach((k, i) => { k._row = ref.keys[i]._row; });
+      // それ以外は、縦位置が最も近いキーの行から、離れている分だけ行をずらす
+      else for (const k of c.keys) {
+        const n = ref.keys.reduce((b, r) => (Math.abs(r.y - k.y) < Math.abs(b.y - k.y) ? r : b), ref.keys[0]);
+        k._row = n._row + steps(k.y - n.y);
+      }
+      done.push(c);
+    }
+  }
+  return keys;
+}
+
 function compressSplit(data) {
-  if (!data.meta.split) return { ...data, keys: data.keys.map((k) => ({ ...k, _side: 0 })) };
+  if (!data.meta.split) return { ...data, keys: assignRows(data.keys.map((k) => ({ ...k, _side: 0 }))) };
   const { gap, at: split } = splitX(data.keys);
   if (gap <= PITCH) fail('meta.split が true ですが、左右のキーの間が空いていません。左半分と右半分が横方向に重ならず、間が1u以上空く座標にしてください（第10.10節）');
   const right = (k) => k.x + KS / 2 >= split;
@@ -453,7 +492,7 @@ function compressSplit(data) {
   const rightEdge = Math.min(...data.keys.filter(right).flatMap((k) => keyCorners(k).map((p) => p[0])));
   const dx = Math.max(0, rightEdge - leftEdge - (SPLIT_GAP - (PITCH - KS)));
   const keys = data.keys.map((k) => (right(k) ? { ...k, _side: 1, x: k.x - dx, ...(k.rx !== undefined ? { rx: k.rx - dx } : {}) } : { ...k, _side: 0 }));
-  return { ...data, keys };
+  return { ...data, keys: assignRows(keys) };
 }
 
 // 表示スロットの割り当て（第3.2節）。凡例の順に、同じキーに出力を持つレイヤーが使っていない最も若いスロットを選ぶ
@@ -747,7 +786,7 @@ function render(data, theme, icons, best, i) {
     };
     const lines = (ls, x, y) => ls.map((t, j) => richLine(t, x, y + j * FOOT_LH)).join('');
     if (abbr.length) {
-      const c = mix(P.base, groundColor, 0.72);
+      const c = readable(mix(P.base, groundColor, 0.72), P.groundBg, P.base);
       foot += abbrLines.map((t, j) => richLine(t, M, abbrY + j * ABBR_LH, ABBR_FS, c)).join('');
     }
     if (noteCol) {
