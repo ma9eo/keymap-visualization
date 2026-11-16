@@ -69,9 +69,9 @@
           "base": {
             "oneOf": [
               { "type": "string" },
-              { "type": "object", "required": ["text"], "additionalProperties": false, "properties": { "text": { "type": "string" }, "icon": { "const": "one-shot", "description": "ワンショット修飾キー（第4.7節）" } } }
+              { "type": "object", "required": ["text"], "additionalProperties": false, "properties": { "text": { "type": "string" }, "icon": { "const": "one-shot", "description": "ワンショット修飾キー（第4.7節）" }, "tentative": { "type": "boolean", "description": "意味を確かめていない仮の名前（第9.4節）。描画プログラムが「?」を付ける" } } }
             ],
-            "description": "基本入力。ワンショット修飾キーは { text, icon: \"one-shot\" }"
+            "description": "基本入力。ワンショット修飾キーは { text, icon: \"one-shot\" }、意味を確かめていない仮の名前は { text, tentative: true }"
           },
           "cells": {
             "type": "object",
@@ -98,7 +98,13 @@
                     "tentative": { "type": "boolean", "description": "意味を確かめていない仮の名前（第9.4節）。描画プログラムが「?」を付ける" },
                     "icon": { "const": "one-shot", "description": "ワンショット修飾キー（第4.7節）" },
                     "short": { "type": "string", "description": "短縮表記。セルに収まらないときに描画プログラムが使い、正式名を短縮表記の一覧に載せる（第10.4節）。記号1文字だけにはしない" },
-                    "hold": { "type": "string", "description": "このレイヤーでの Hold の機能名（第4.5節）。下部に、このレイヤーの淡い色の帯で描く。Base と同じ Hold は書かない。レイヤー切り替えの長押しは switch に書く" }
+                    "hold": {
+                      "description": "このレイヤーでの Hold の機能名（第4.5節）。下部に、このレイヤーの淡い色の帯で描く。Base と同じ Hold は書かない。レイヤー切り替えの長押しは switch に書く。帯に収まらない場合の短縮表記を付けるときは { text, short }",
+                      "oneOf": [
+                        { "type": "string" },
+                        { "type": "object", "required": ["text"], "additionalProperties": false, "properties": { "text": { "type": "string" }, "short": { "type": "string", "description": "短縮表記（第10.4節）。正式名は短縮表記の一覧に載せる。記号1文字だけにはしない" }, "tentative": { "type": "boolean", "description": "意味を確かめていない仮の名前（第9.4節）" } } }
+                      ]
+                    }
                   }
                 }
               ]
@@ -152,9 +158,9 @@
           "kind": {
             "type": "string",
             "enum": ["base", "layer", "go"],
-            "description": "base：Baseで有効、またはレイヤーに関係なく有効（Baseだけに限る場合は note か comboNote に書く）／layer：そのレイヤーにいる間だけ有効／go：そのレイヤーへ行く（第3.1節）"
+            "description": "base：Baseで有効、またはレイヤーに関係なく有効（Baseだけに限る場合は note か comboNote に書く）／layer：そのレイヤーにいる間だけ有効／go：そのレイヤーへ行く（layer が base なら Base へ戻る。第3.1節）"
           },
-          "layer": { "oneOf": [{ "type": "string" }, { "type": "array", "minItems": 2, "items": { "type": "string" } }], "description": "kind が layer・go のときのレイヤーの id。layer で複数の追加レイヤーで有効な場合は配列にする（go は1つだけ）" },
+          "layer": { "oneOf": [{ "type": "string" }, { "type": "array", "minItems": 2, "items": { "type": "string" } }], "description": "kind が layer・go のときのレイヤーの id。layer で複数の追加レイヤーで有効な場合は配列にする（go は1つだけ）。go で Base へ戻るときは base（白地に枠線で描く）" },
           "via": { "type": "string", "enum": ["hold", "toggle", "to", "one-shot"], "description": "kind が go のときの切り替える操作（第6章）。省略時は hold。hold 以外はラベルに操作アイコンを付ける" }
         },
         "allOf": [
